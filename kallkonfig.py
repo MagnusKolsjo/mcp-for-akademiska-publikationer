@@ -28,10 +28,11 @@ import os
 
 KONTAKT_EPOST = os.environ.get("DISCOVERY_KONTAKT_EPOST", "").strip()
 
-_STANDARD_USER_AGENT = os.environ.get(
-    "DISCOVERY_USER_AGENT",
-    "Discovery-MCP/0.1 (+https://github.com/MagnusKolsjo/discovery-mcp)",
-)
+# Standardvärdet är projektets egen identitet (namn/version), inte något
+# installatörsspecifikt — ingen kontaktuppgift kodas in här. Kontakt-e-posten
+# läggs till separat i user_agent_med_kontakt() nedan, bara om
+# DISCOVERY_KONTAKT_EPOST är satt.
+_STANDARD_USER_AGENT = os.environ.get("DISCOVERY_USER_AGENT", "Discovery-MCP/0.1")
 
 
 def aktiv(kalla: str) -> bool:
@@ -45,18 +46,26 @@ def api_nyckel(kalla: str) -> str:
     return os.environ.get(f"DISCOVERY_{kalla.upper()}_API_NYCKEL", "").strip()
 
 
-def user_agent(befintlig_env: str | None = None) -> str:
+def user_agent(befintlig_env: str | None = None, *, med_kontakt: bool = False) -> str:
     """User-Agent för en ny källa.
 
     befintlig_env - namnet på en källspecifik *_USER_AGENT-variabel som
     fanns innan det här uppdraget (t.ex. "ARXIV_USER_AGENT"). Om den är
-    satt används den, för bakåtkompatibilitet. Annars DISCOVERY_USER_AGENT
-    eller standardvärdet.
+    satt används den oförändrad, för bakåtkompatibilitet — kontakt-e-posten
+    bakas då inte in (den variabelns eget värde styr helt).
+
+    med_kontakt - om True och DISCOVERY_KONTAKT_EPOST är satt, bakas
+    e-posten in i DISCOVERY_USER_AGENT/standardvärdet. Källor som ber om en
+    identifierbar kontakt (t.ex. NVA, Unpaywall) sätter detta till True.
+    Ingen kontaktuppgift läggs till om DISCOVERY_KONTAKT_EPOST inte är satt
+    — installatören avgör själv om den vill identifiera sig.
     """
     if befintlig_env:
         varde = os.environ.get(befintlig_env, "").strip()
         if varde:
             return varde
+    if med_kontakt and KONTAKT_EPOST:
+        return f"{_STANDARD_USER_AGENT} (mailto:{KONTAKT_EPOST})"
     return _STANDARD_USER_AGENT
 
 
