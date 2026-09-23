@@ -32,6 +32,8 @@ hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
 
 ## Installation
 
+Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
+
 1. Klona repot.
 2. Skapa ett Python-venv och installera beroenden:
    ```bash
@@ -96,7 +98,10 @@ Discovery är byggd för att kopplas på fler källor. Mönstret:
 Servern stödjer två transporter, valda via `MCP_TRANSPORT`:
 
 - **stdio** — MCP-klienten startar processen lokalt.
-- **http** — långkörande process bakom en URL, med valfri Bearer-token-autentisering (`MCP_API_KEY`).
+- **http** — långkörande process bakom en URL, delad av flera klienter/maskiner.
+  Kräver `MCP_API_KEY`: uppstarten avbryts (exitkod 2) om nyckeln saknas, så en
+  öppen endpoint inte kan uppstå av misstag. Klienten skickar nyckeln i
+  `Authorization: Bearer <nyckel>`-headern.
 
 ## Licens
 

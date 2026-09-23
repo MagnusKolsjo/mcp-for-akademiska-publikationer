@@ -24,9 +24,8 @@ Källor och verktyg:
 Nya källor kopplas in via providers.py — se den modulen för mönstret.
 """
 
-import logging
-import os
 from pathlib import Path
+from typing import Any, NotRequired, TypedDict
 
 from dotenv import load_dotenv
 
@@ -36,7 +35,8 @@ from dotenv import load_dotenv
 # User-Agent, timeout) vid import.
 load_dotenv(Path(__file__).parent / ".env")
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 import crossref_client
 import datacite_client
@@ -45,16 +45,79 @@ import providers
 from crossref_client import CrossrefFel
 from datacite_client import DataCiteFel
 from libris_client import LibrisFel
+from mcp_annotationer import CACHE_HINTAR, LASNING_DB, LASNING_EXTERN
+from mcp_transport import starta
 
-log = logging.getLogger(__name__)
-mcp = FastMCP(name="discovery")
+mcp = MCPServer(
+    "discovery",
+    instructions=(
+        "Sök publikationer och deras metadata över flera källor: Libris "
+        "(svenska bibliotekskatalogen), Crossref och DataCite (DOI-metadata). "
+        "discovery_sok slår mot Crossref och DataCite samtidigt; libris_sok "
+        "har ett eget, rikare frågespråk och egna verktyg."
+    ),
+    version="0.1.0",
+    cache_hints=CACHE_HINTAR,
+)
+
+
+# ===========================================================================
+# Typade returvärden
+#
+# Träffarnas inre fält varieras mycket mellan poster (historiska poster
+# saknar ofta fält som moderna poster har), så varje träff typas som
+# dict[str, Any] — bara skalet runt listan (totalt, offset/sida, antal)
+# är stabilt nog för en strikt TypedDict. libris_hamta och *_hamta med
+# format="full" returnerar dessutom olika fältmängder beroende på format,
+# så de typas som öppna dict[str, Any].
+# ===========================================================================
+
+class LibrisSokResultat(TypedDict):
+    totalt: int | None
+    offset: int
+    antal: int
+    traffar: list[dict[str, Any]]
+
+
+class LibrisBestandResultat(TypedDict):
+    libris_id: str
+    antal_bibliotek: int | None
+    bibliotek: list[dict[str, Any]]
+
+
+class LibrisTermerResultat(TypedDict):
+    totalt: int | None
+    antal: int
+    termer: list[dict[str, Any]]
+
+
+class KallSokResultat(TypedDict):
+    kalla: str
+    totalt: int | None
+    offset: NotRequired[int]
+    sida: NotRequired[int]
+    antal: int
+    traffar: list[dict[str, Any]]
+
+
+class DiscoverySokResultat(TypedDict):
+    fraga: str
+    kallor: list[str]
+    per_kalla: dict[str, dict[str, Any]]
+    antal: int
+    traffar: list[dict[str, Any]]
+    fel: NotRequired[dict[str, str]]
+
+
+class DiscoveryKallorResultat(TypedDict):
+    kallor: list[dict[str, Any]]
 
 
 # ===========================================================================
 # Libris — Sveriges nationella bibliotekskatalog (KB)
 # ===========================================================================
 
-@mcp.tool()
+@mcp.tool(title="Sök i Libris", annotations=LASNING_EXTERN)
 def libris_sok(
     q: str = "",
     limit: int = 20,
@@ -65,7 +128,7 @@ def libris_sok(
     till_ar: int = 0,
     amne_id: str = "",
     filter: dict | None = None,
-) -> dict:
+) -> LibrisSokResultat:
     """Sök i Libris, Sveriges nationella bibliotekskatalog.
 
     Fritextsökningen stödjer Libris operatorer: mellanslag betyder OCH,
@@ -113,11 +176,11 @@ def libris_sok(
             filter=sammanslaget or None,
         )
     except LibrisFel as exc:
-        return {"fel": str(exc)}
+        raise ToolError(str(exc)) from exc
 
 
-@mcp.tool()
-def libris_hamta(libris_id: str, format: str = "kort") -> dict:
+@mcp.tool(title="Läs en Libris-post", annotations=LASNING_EXTERN)
+def libris_hamta(libris_id: str, format: str = "kort") -> dict[str, Any]:
     """Läs en post i Libris via dess id.
 
     libris_id - postens id, antingen den korta nyckeln ("l4x7v34x34zz5lq")
@@ -126,18 +189,19 @@ def libris_hamta(libris_id: str, format: str = "kort") -> dict:
                 ämnen, identifierare). "full" ger den fullständiga, inbäddade
                 JSON-LD-posten (stor, men komplett).
 
-    Returnerar postdata enligt valt format.
+    Returnerar postdata enligt valt format. Ett okänt libris_id ger ett fel
+    som säger att posten inte hittades.
     """
     try:
         if format == "full":
             return libris_client.hamta_post(libris_id)
         return libris_client.sammanfatta_post(libris_id)
     except LibrisFel as exc:
-        return {"fel": str(exc)}
+        raise ToolError(str(exc)) from exc
 
 
-@mcp.tool()
-def libris_bestand(libris_id: str, limit: int = 50) -> dict:
+@mcp.tool(title="Visa Libris-bestånd", annotations=LASNING_EXTERN)
+def libris_bestand(libris_id: str, limit: int = 50) -> LibrisBestandResultat:
     """Visa vilka bibliotek som har ett verk (bestånd).
 
     libris_id - postens id eller URL för verket/instansen.
@@ -149,11 +213,11 @@ def libris_bestand(libris_id: str, limit: int = 50) -> dict:
     try:
         return libris_client.bestand(libris_id, limit=limit)
     except LibrisFel as exc:
-        return {"fel": str(exc)}
+        raise ToolError(str(exc)) from exc
 
 
-@mcp.tool()
-def libris_sla_upp_term(q: str, typ: str = "", limit: int = 10) -> dict:
+@mcp.tool(title="Slå upp Libris-term", annotations=LASNING_EXTERN)
+def libris_sla_upp_term(q: str, typ: str = "", limit: int = 10) -> LibrisTermerResultat:
     """Slå upp länkade termer på id.kb.se för att bygga precisa filter.
 
     Översätter fritext till id.kb.se-URI:er som kan matas in i libris_sok
@@ -171,14 +235,14 @@ def libris_sla_upp_term(q: str, typ: str = "", limit: int = 10) -> dict:
     try:
         return libris_client.sla_upp_term(q, typ=typ or None, limit=limit)
     except LibrisFel as exc:
-        return {"fel": str(exc)}
+        raise ToolError(str(exc)) from exc
 
 
 # ===========================================================================
 # Crossref — DOI:er för artiklar, böcker, konferensbidrag
 # ===========================================================================
 
-@mcp.tool()
+@mcp.tool(title="Sök i Crossref", annotations=LASNING_EXTERN)
 def cr_sok(
     q: str = "",
     limit: int = 20,
@@ -191,7 +255,7 @@ def cr_sok(
     titel: str = "",
     tidskrift: str = "",
     filter: dict | None = None,
-) -> dict:
+) -> KallSokResultat:
     """Sök publikationer i Crossref (DOI:er för vetenskaplig litteratur).
 
     Parametrar:
@@ -228,30 +292,31 @@ def cr_sok(
             filter=filter or None,
         )
     except CrossrefFel as exc:
-        return {"fel": str(exc)}
+        raise ToolError(str(exc)) from exc
 
 
-@mcp.tool()
-def cr_hamta(doi: str, format: str = "kort") -> dict:
+@mcp.tool(title="Läs ett verk i Crossref", annotations=LASNING_EXTERN)
+def cr_hamta(doi: str, format: str = "kort") -> dict[str, Any]:
     """Läs ett verk i Crossref via dess DOI.
 
     doi    - DOI som naken identifierare, doi.org-URL eller doi:-sträng.
     format - "kort" ger en kompakt sammanfattning, "full" lägger till abstract,
              volym/nummer/sidor, ISSN/ISBN, ämnen och licens.
 
-    Returnerar postdata enligt valt format.
+    Returnerar postdata enligt valt format. En okänd DOI ger ett fel som
+    säger att verket inte hittades.
     """
     try:
         return crossref_client.hamta(doi, format=format)
     except CrossrefFel as exc:
-        return {"fel": str(exc)}
+        raise ToolError(str(exc)) from exc
 
 
 # ===========================================================================
 # DataCite — DOI:er för forskningsdata, programvara, preprints
 # ===========================================================================
 
-@mcp.tool()
+@mcp.tool(title="Sök i DataCite", annotations=LASNING_EXTERN)
 def dc_sok(
     q: str = "",
     limit: int = 20,
@@ -263,7 +328,7 @@ def dc_sok(
     utgivare: str = "",
     klient_id: str = "",
     filter: dict | None = None,
-) -> dict:
+) -> KallSokResultat:
     """Sök forskningsutfall i DataCite (DOI:er för data, programvara, preprints).
 
     Parametrar:
@@ -298,37 +363,38 @@ def dc_sok(
             filter=filter or None,
         )
     except DataCiteFel as exc:
-        return {"fel": str(exc)}
+        raise ToolError(str(exc)) from exc
 
 
-@mcp.tool()
-def dc_hamta(doi: str, format: str = "kort") -> dict:
+@mcp.tool(title="Läs en post i DataCite", annotations=LASNING_EXTERN)
+def dc_hamta(doi: str, format: str = "kort") -> dict[str, Any]:
     """Läs en post i DataCite via dess DOI.
 
     doi    - DOI som naken identifierare, doi.org-URL eller doi:-sträng.
     format - "kort" ger en kompakt sammanfattning, "full" lägger till abstract,
              version, ämnen, format, rättigheter och statistik.
 
-    Returnerar postdata enligt valt format.
+    Returnerar postdata enligt valt format. En okänd DOI ger ett fel som
+    säger att posten inte hittades.
     """
     try:
         return datacite_client.hamta(doi, format=format)
     except DataCiteFel as exc:
-        return {"fel": str(exc)}
+        raise ToolError(str(exc)) from exc
 
 
 # ===========================================================================
 # Enad sökning över DOI-källorna
 # ===========================================================================
 
-@mcp.tool()
+@mcp.tool(title="Sök flera DOI-källor samtidigt", annotations=LASNING_EXTERN)
 def discovery_sok(
     q: str,
     kallor: list[str] | None = None,
     limit_per_kalla: int = 10,
     fran_ar: int = 0,
     till_ar: int = 0,
-) -> dict:
+) -> DiscoverySokResultat:
     """Sök flera DOI-källor samtidigt och få sammanslagna, normaliserade träffar.
 
     Slår mot Crossref och DataCite (eller en delmängd) i ett anrop och returnerar
@@ -357,55 +423,20 @@ def discovery_sok(
             till_ar=till_ar or None,
         )
     except ValueError as exc:
-        return {"fel": str(exc)}
+        raise ToolError(str(exc)) from exc
 
 
-@mcp.tool()
-def discovery_kallor() -> dict:
+@mcp.tool(title="Lista discovery-källor", annotations=LASNING_DB)
+def discovery_kallor() -> DiscoveryKallorResultat:
     """Lista de DOI-källor som ingår i den enade sökningen (discovery_sok).
 
     Returnerar varje källas namn (att använda i discovery_sok), en etikett och
     en kort beskrivning av vad källan täcker.
+
+    Listan är inbyggd i servern (providers.py), inte hämtad över nätet.
     """
     return providers.lista_kallor()
 
 
 if __name__ == "__main__":
-    transport = os.environ.get("MCP_TRANSPORT", "stdio").lower()
-
-    if transport == "stdio":
-        mcp.run(transport="stdio")
-    elif transport == "http":
-        import uvicorn
-
-        host = os.environ.get("MCP_HOST", "127.0.0.1")
-        port = int(os.environ.get("MCP_PORT", "8000"))
-        api_nyckel = os.environ.get("MCP_API_KEY", "")
-
-        app = mcp.streamable_http_app()
-        if api_nyckel:
-            from starlette.middleware.base import BaseHTTPMiddleware
-            from starlette.responses import JSONResponse
-
-            class _BearerAuthMiddleware(BaseHTTPMiddleware):
-                """Validerar Authorization: Bearer <nyckel> mot konfigurerad nyckel."""
-
-                def __init__(self, app, nyckel: str):
-                    super().__init__(app)
-                    self.nyckel = nyckel
-
-                async def dispatch(self, request, call_next):
-                    auth = request.headers.get("authorization", "")
-                    if not auth.startswith("Bearer "):
-                        return JSONResponse({"error": "Saknar Bearer-token"}, status_code=401)
-                    if auth[len("Bearer "):] != self.nyckel:
-                        return JSONResponse({"error": "Felaktig Bearer-token"}, status_code=401)
-                    return await call_next(request)
-
-            app.add_middleware(_BearerAuthMiddleware, nyckel=api_nyckel)
-
-        uvicorn.run(app, host=host, port=port)
-    else:
-        raise RuntimeError(
-            f"MCP_TRANSPORT='{transport}' är okänt. Använd 'stdio' eller 'http'."
-        )
+    starta(mcp, standardport=8000)
