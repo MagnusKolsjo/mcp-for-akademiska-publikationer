@@ -28,11 +28,15 @@ import os
 
 KONTAKT_EPOST = os.environ.get("DISCOVERY_KONTAKT_EPOST", "").strip()
 
-# Standardvärdet är projektets egen identitet (namn/version), inte något
-# installatörsspecifikt — ingen kontaktuppgift kodas in här. Kontakt-e-posten
-# läggs till separat i user_agent_med_kontakt() nedan, bara om
-# DISCOVERY_KONTAKT_EPOST är satt.
-_STANDARD_USER_AGENT = os.environ.get("DISCOVERY_USER_AGENT", "Discovery-MCP/0.1")
+# Standardvärdet är projektets egen identitet (namn, version, projekt-URL)
+# — ett medvetet val, inte en installatörsspecifik uppgift. Det som aldrig
+# kodas in här är kontakt-e-post, nycklar eller annat som pekar ut en
+# enskild installation; kontakt-e-posten läggs till separat i user_agent()
+# nedan, bara om DISCOVERY_KONTAKT_EPOST är satt.
+_STANDARD_USER_AGENT = os.environ.get(
+    "DISCOVERY_USER_AGENT",
+    "Discovery-MCP/0.1 (+https://github.com/MagnusKolsjo/discovery-mcp)",
+)
 
 
 def aktiv(kalla: str) -> bool:

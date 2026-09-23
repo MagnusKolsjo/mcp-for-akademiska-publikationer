@@ -33,7 +33,7 @@ import requests
 BASE_URL = os.environ.get("ARXIV_BASE_URL", "https://export.arxiv.org/api/query").rstrip("/")
 USER_AGENT = os.environ.get(
     "ARXIV_USER_AGENT",
-    "Discovery-MCP/0.1 (MCP-server mot arXiv)",
+    "Discovery-MCP/0.1 (+https://github.com/MagnusKolsjo/discovery-mcp)",
 )
 TIMEOUT = float(os.environ.get("ARXIV_TIMEOUT", "30"))
 
