@@ -16,8 +16,44 @@ Biblioteks-/katalogkällor med en annan träffform (som Libris JSON-LD) ingår
 inte i den enade DOI-sökningen utan har sina egna verktyg.
 """
 
+import arxiv_client
 import crossref_client
 import datacite_client
+
+
+def _arxiv_normaliserad(traff: dict) -> dict:
+    """Formar en arxiv_client-träff (eget, rikare fältschema) till samma
+    korsreferens-form som Crossref och DataCite redan lämnar direkt.
+
+    arXiv saknar utgivningsår i egentlig mening — "ar" sätts från
+    inskickningsdatumet (publicerad), som är den närmaste motsvarigheten.
+    Citeringar levereras inte av arXivs API.
+    """
+    publicerad = traff.get("publicerad") or ""
+    ar = int(publicerad[:4]) if publicerad[:4].isdigit() else None
+    return {
+        "kalla": arxiv_client.KALLA,
+        "doi": traff.get("doi"),
+        "titel": traff.get("titel"),
+        "forfattare": traff.get("forfattare", []),
+        "ar": ar,
+        "typ": "preprint",
+        "utgivare": "arXiv",
+        "container": traff.get("journal_ref"),
+        "url": traff.get("url_abs"),
+        "citeringar": None,
+    }
+
+
+def _arxiv_sok(q, limit, fran_ar, till_ar):
+    """Anropar arxiv_client.sok() och normaliserar dess rikare träffschema."""
+    svar = arxiv_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+    return {
+        "totalt": svar.get("totalt"),
+        "antal": svar.get("antal"),
+        "traffar": [_arxiv_normaliserad(t) for t in svar.get("traffar", [])],
+    }
+
 
 # Registret över DOI-källor som ingår i den enade sökningen. Nyckeln är det
 # källnamn som används i discovery_sok(kallor=[...]) och som taggas på varje
@@ -39,6 +75,12 @@ PROVIDERS: dict[str, dict] = {
             q, limit=limit, fran_ar=fran_ar, till_ar=till_ar
         ),
         "fel": datacite_client.DataCiteFel,
+    },
+    "arxiv": {
+        "etikett": "arXiv",
+        "beskrivning": "Preprints inom fysik, matematik, datavetenskap m.fl.",
+        "sok": _arxiv_sok,
+        "fel": arxiv_client.ArxivFel,
     },
 }
 

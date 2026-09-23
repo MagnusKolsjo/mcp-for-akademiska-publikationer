@@ -12,9 +12,11 @@ direkt mot källans API — det finns ingen lokal databas och ingen synk, efters
 källorna redan är färdigindexerade sök-API:er.
 
 Varje källa är en självständig klientmodul. DOI-källorna (Crossref och DataCite)
-normaliserar sina träffar till en gemensam form, vilket gör att den enade
-sökningen `discovery_sok` kan slå mot flera källor samtidigt och returnera en
-sammanslagen träfflista. Libris har ett eget, rikare frågespråk och egna verktyg.
+normaliserar sina träffar till en gemensam form; arXiv har ett eget, rikare
+träffschema som normaliseras i providers.py för att också delta i den enade
+sökningen. Det gör att `discovery_sok` kan slå mot flera källor samtidigt och
+returnera en sammanslagen träfflista. Libris har ett eget, rikare frågespråk
+och egna verktyg, utanför den enade sökningen.
 
 Nedladdning och lagring av fulltext ligger utanför den här servern — discovery
 hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
@@ -29,6 +31,13 @@ hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
   ([dokumentation](https://www.crossref.org/documentation/retrieve-metadata/rest-api/)).
 - **DataCite** — DOI-metadata för forskningsdata, programvara och preprints.
   `https://api.datacite.org/dois` ([dokumentation](https://support.datacite.org/docs/api)).
+- **arXiv** — preprints inom fysik, matematik, datavetenskap, biologi m.fl.
+  `https://export.arxiv.org/api/query`
+  ([dokumentation](https://info.arxiv.org/help/api/user-manual.html)). Klienten
+  begränsar sig till högst ett anrop var tredje sekund, enligt arXivs
+  [användarvillkor](https://info.arxiv.org/help/api/tou.html). I enlighet med
+  samma villkor: *Thank you to arXiv for use of its open access
+  interoperability.*
 
 ## Installation
 
@@ -42,8 +51,8 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
    pip install -r requirements.txt
    ```
 3. Kopiera `config.example.env` till `.env` och fyll i värdena. Sätt särskilt en
-   egen `LIBRIS_USER_AGENT` och `DATACITE_USER_AGENT` med kontaktuppgift, och
-   gärna `CROSSREF_MAILTO` för Crossrefs polite pool.
+   egen `LIBRIS_USER_AGENT`, `DATACITE_USER_AGENT` och `ARXIV_USER_AGENT` med
+   kontaktuppgift, och gärna `CROSSREF_MAILTO` för Crossrefs polite pool.
 4. Lägg till servern i MCP-klientens konfiguration, t.ex.:
    ```json
    {
@@ -60,12 +69,14 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
 
 | Verktyg | Beskrivning |
 |---|---|
-| `discovery_sok` | Sök Crossref och DataCite samtidigt; sammanslagna, normaliserade träffar. |
+| `discovery_sok` | Sök Crossref, DataCite och arXiv samtidigt; sammanslagna, normaliserade träffar. |
 | `discovery_kallor` | Lista de DOI-källor som ingår i den enade sökningen. |
 | `cr_sok` | Sök Crossref (artiklar m.m.), med fält- och årsfilter. |
 | `cr_hamta` | Läs ett verk i Crossref via DOI (kort eller full). |
 | `dc_sok` | Sök DataCite (forskningsdata m.m.), med typ-, års- och utgivarfilter. |
 | `dc_hamta` | Läs en post i DataCite via DOI (kort eller full). |
+| `arxiv_sok` | Sök preprints på arXiv, med fältprefix, kategori och årsfilter. |
+| `arxiv_hamta` | Läs en preprint på arXiv via dess id (kort eller full). |
 | `libris_sok` | Fritext- och filtersökning i Libris-katalogen. |
 | `libris_hamta` | Läs en Libris-post — sammanfattning eller fullständig JSON-LD. |
 | `libris_bestand` | Visa vilka bibliotek som har ett verk (sigel och namn). |
@@ -83,6 +94,7 @@ Käll-specifik sökning:
 
 - `cr_sok(titel="attention is all you need", typ="proceedings-article")` → Crossref med fältfilter.
 - `dc_sok(q="ocean temperature", typ="dataset", utgivare="PANGAEA")` → DataCite med typ- och utgivarfilter.
+- `arxiv_sok(q="au:hinton AND cat:cs.LG")` → arXiv med fältprefix och kategori.
 
 ## Lägga till en ny källa
 

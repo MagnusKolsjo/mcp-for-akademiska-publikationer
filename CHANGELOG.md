@@ -5,6 +5,13 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
 
 ## [Unreleased]
 
+### Tillagt
+- arXiv som ny källa: `arxiv_client.py`, verktygen `arxiv_sok` och
+  `arxiv_hamta`, och en rad i `providers.py` så att arXiv deltar i
+  `discovery_sok`/`discovery_kallor` tillsammans med Crossref och DataCite.
+  Anropen mot arXiv strypas till högst ett var tredje sekund, enligt
+  källans användarvillkor.
+
 ### Ändrat
 - Migrerad till `mcp` 2.x (`MCPServer` i stället för `FastMCP`, `mcp>=2.0,<3`
   i `requirements.txt`).

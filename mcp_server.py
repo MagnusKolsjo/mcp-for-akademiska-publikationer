@@ -17,11 +17,18 @@ Källor och verktyg:
   DataCite (DOI:er för forskningsdata, programvara, preprints)
     dc_sok              - sök poster, med typ-, års- och utgivarfilter
     dc_hamta            - läs en post via DOI
+  arXiv (preprints inom fysik, matematik, datavetenskap m.fl.)
+    arxiv_sok           - sök preprints, med fältprefix, kategori och årsfilter
+    arxiv_hamta         - läs en preprint via dess arXiv-id
   Enad sökning över DOI-källorna
-    discovery_sok       - sök Crossref och DataCite samtidigt, sammanslaget
+    discovery_sok       - sök Crossref, DataCite och arXiv samtidigt, sammanslaget
     discovery_kallor    - lista de källor som ingår i den enade sökningen
 
 Nya källor kopplas in via providers.py — se den modulen för mönstret.
+
+arXivs användarvillkor (https://info.arxiv.org/help/api/tou.html) ber om
+erkännandet "Thank you to arXiv for use of its open access
+interoperability." — se README:s avsnitt om datakällor.
 """
 
 from pathlib import Path
@@ -38,10 +45,12 @@ load_dotenv(Path(__file__).parent / ".env")
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
+import arxiv_client
 import crossref_client
 import datacite_client
 import libris_client
 import providers
+from arxiv_client import ArxivFel
 from crossref_client import CrossrefFel
 from datacite_client import DataCiteFel
 from libris_client import LibrisFel
@@ -52,9 +61,10 @@ mcp = MCPServer(
     "discovery",
     instructions=(
         "Sök publikationer och deras metadata över flera källor: Libris "
-        "(svenska bibliotekskatalogen), Crossref och DataCite (DOI-metadata). "
-        "discovery_sok slår mot Crossref och DataCite samtidigt; libris_sok "
-        "har ett eget, rikare frågespråk och egna verktyg."
+        "(svenska bibliotekskatalogen), Crossref, DataCite och arXiv "
+        "(DOI-metadata respektive preprints). discovery_sok slår mot "
+        "Crossref, DataCite och arXiv samtidigt; libris_sok har ett eget, "
+        "rikare frågespråk och egna verktyg."
     ),
     version="0.1.0",
     cache_hints=CACHE_HINTAR,
@@ -111,6 +121,30 @@ class DiscoverySokResultat(TypedDict):
 
 class DiscoveryKallorResultat(TypedDict):
     kallor: list[dict[str, Any]]
+
+
+class ArxivTraff(TypedDict):
+    id: str | None
+    version: int | None
+    titel: str | None
+    forfattare: list[dict[str, Any]]
+    sammanfattning: str | None
+    publicerad: str | None
+    uppdaterad: str | None
+    kategorier: list[str]
+    primarkategori: str | None
+    doi: str | None
+    journal_ref: str | None
+    url_abs: str | None
+    url_pdf: str | None
+
+
+class ArxivSokResultat(TypedDict):
+    kalla: str
+    totalt: int | None
+    start: int
+    antal: int
+    traffar: list[ArxivTraff]
 
 
 # ===========================================================================
@@ -384,6 +418,82 @@ def dc_hamta(doi: str, format: str = "kort") -> dict[str, Any]:
 
 
 # ===========================================================================
+# arXiv — preprints inom fysik, matematik, datavetenskap m.fl.
+# ===========================================================================
+
+@mcp.tool(title="Sök på arXiv", annotations=LASNING_EXTERN)
+def arxiv_sok(
+    q: str = "",
+    kategori: str = "",
+    limit: int = 20,
+    start: int = 0,
+    sort_by: str = "",
+    sort_order: str = "",
+    fran_ar: int = 0,
+    till_ar: int = 0,
+) -> ArxivSokResultat:
+    """Sök preprints på arXiv.
+
+    Fritextfrågan stödjer arXivs fältprefix (ti:, au:, abs:, cat:, all:) och
+    operatorerna AND, OR, ANDNOT, t.ex. `au:hinton AND cat:cs.LG`. Utan
+    prefix söks alla fält (all:).
+
+    Parametrar:
+      q          - fritextfråga, gärna med fältprefix.
+      kategori   - arXiv-kategori att begränsa till, t.ex. "cs.LG",
+                   "astro-ph.CO". ANDas ihop med q om båda anges.
+      limit      - max antal träffar (1-100, standard 20).
+      start      - antal träffar att hoppa över (paginering).
+      sort_by    - "relevance" (standard), "lastUpdatedDate" eller
+                   "submittedDate".
+      sort_order - "ascending" eller "descending".
+      fran_ar    - tidigaste inskickningsår (inklusive).
+      till_ar    - senaste inskickningsår (inklusive).
+
+    Kräver minst en av q, kategori, fran_ar eller till_ar.
+
+    Returnerar antal träffar totalt och en lista med träffar. Sammanfattningen
+    är kapad till 500 tecken (markerad med "…"); hämta hela texten med
+    arxiv_hamta(format="full"). Varje träff har ett id som kan matas vidare
+    till arxiv_hamta.
+
+    Thank you to arXiv for use of its open access interoperability.
+    """
+    try:
+        return arxiv_client.sok(
+            q=q or None,
+            limit=limit,
+            start=start,
+            sort_by=sort_by or None,
+            sort_order=sort_order or None,
+            kategori=kategori or None,
+            fran_ar=fran_ar or None,
+            till_ar=till_ar or None,
+        )
+    except ArxivFel as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool(title="Läs en post på arXiv", annotations=LASNING_EXTERN)
+def arxiv_hamta(arxiv_id: str, format: str = "kort") -> ArxivTraff:
+    """Läs en preprint på arXiv via dess id.
+
+    arxiv_id - arXiv-id med eller utan version, t.ex. "2101.00001",
+               "2101.00001v2" eller "arXiv:2101.00001". Utan version ges
+               den senaste.
+    format   - "kort" kapar sammanfattningen till 500 tecken, "full" ger
+               den oavkortad.
+
+    Returnerar postdata enligt valt format. Ett okänt id ger ett fel som
+    säger att posten inte hittades.
+    """
+    try:
+        return arxiv_client.hamta(arxiv_id, format=format)
+    except ArxivFel as exc:
+        raise ToolError(str(exc)) from exc
+
+
+# ===========================================================================
 # Enad sökning över DOI-källorna
 # ===========================================================================
 
@@ -397,18 +507,20 @@ def discovery_sok(
 ) -> DiscoverySokResultat:
     """Sök flera DOI-källor samtidigt och få sammanslagna, normaliserade träffar.
 
-    Slår mot Crossref och DataCite (eller en delmängd) i ett anrop och returnerar
-    en gemensam träfflista där varje träff är taggad med sin källa. Bra som första
-    bred sökning; använd käll-verktygen (cr_sok, dc_sok) för käll-specifika filter.
+    Slår mot Crossref, DataCite och arXiv (eller en delmängd) i ett anrop och
+    returnerar en gemensam träfflista där varje träff är taggad med sin källa.
+    Bra som första bred sökning; använd käll-verktygen (cr_sok, dc_sok,
+    arxiv_sok) för käll-specifika filter.
 
     Parametrar:
       q               - fritextfråga som skickas till varje vald källa.
-      kallor          - lista med källnamn ("crossref", "datacite").
+      kallor          - lista med källnamn ("crossref", "datacite", "arxiv").
                         Utelämnad = alla. Se discovery_kallor.
       limit_per_kalla - max antal träffar per källa innan sammanslagning
                         (standard 10).
-      fran_ar         - tidigaste utgivningsår (inklusive).
-      till_ar         - senaste utgivningsår (inklusive).
+      fran_ar         - tidigaste utgivningsår (inklusive; för arXiv tolkas
+                        det som inskickningsår).
+      till_ar         - senaste utgivningsår (inklusive; se ovan).
 
     Varje träff har fälten: kalla, doi, titel, forfattare, ar, typ, utgivare,
     container, url, citeringar. Resultatet sorteras med nyast först. En källa som
