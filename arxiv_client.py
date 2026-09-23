@@ -12,9 +12,11 @@ API-referens och användarvillkor:
   https://info.arxiv.org/help/api/tou.html
 
 arXivs användarvillkor kräver högst ett anrop var tredje sekund från en
-enskild klient. sok() och hamta() serialiseras därför bakom ett lås som
-också håller mellanrummet — nödvändigt eftersom MCP 2.x kör synkrona
-verktyg på arbetstrådar, så flera anrop kan annars gå ut samtidigt.
+enskild klient. sok() och hamta() reserverar därför sin starttid under ett
+kort lås innan varje anrop — nödvändigt eftersom MCP 2.x kör synkrona
+verktyg på arbetstrådar, så flera anrop kan annars starta samtidigt. Låset
+hålls bara för bokföringen, inte under själva HTTP-anropet, så flera anrop
+kan vara i flykt samtidigt så länge starterna ligger minst tre sekunder isär.
 Villkoren ber också om ett erkännande i gränssnittet: "Thank you to arXiv
 for use of its open access interoperability." — se README:s avsnitt om
 datakällor.
@@ -31,7 +33,7 @@ import requests
 BASE_URL = os.environ.get("ARXIV_BASE_URL", "https://export.arxiv.org/api/query").rstrip("/")
 USER_AGENT = os.environ.get(
     "ARXIV_USER_AGENT",
-    "Discovery-MCP/0.1 (MCP-server mot arXiv)",
+    "Discovery-MCP/0.1 (+https://github.com/MagnusKolsjo/discovery-mcp)",
 )
 TIMEOUT = float(os.environ.get("ARXIV_TIMEOUT", "30"))
 
@@ -53,6 +55,12 @@ _NS = {
 
 KORT_SAMMANFATTNING_MAX = 500
 
+# arXiv avvisar ett okänt sortBy/sortOrder-värde med HTTP 400. Validerat här
+# innan anropet, så felet blir begripligt direkt i stället för att gå via
+# källans felpost.
+_GILTIGA_SORT_BY = {"relevance", "lastUpdatedDate", "submittedDate"}
+_GILTIGA_SORT_ORDER = {"ascending", "descending"}
+
 
 class ArxivFel(Exception):
     """Fel vid anrop mot arXiv-API:et."""
@@ -61,58 +69,85 @@ class ArxivFel(Exception):
 _session = requests.Session()
 _session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/atom+xml"})
 
-# Serialiserar alla arXiv-anrop och håller minsta mellanrummet mellan dem.
-# Synkrona MCP-verktyg körs på arbetstrådar i mcp 2.x, så flera anrop mot
-# arxiv_sok/arxiv_hamta kan annars starta samtidigt.
+# Reserverar starttider för arXiv-anrop utan att hålla låset under själva
+# HTTP-anropet. Synkrona MCP-verktyg körs på arbetstrådar i mcp 2.x, så
+# flera anrop mot arxiv_sok/arxiv_hamta kan annars starta samtidigt — men
+# ett anrop som väntar på sin tur ska inte blockera andra trådars anrop som
+# redan är i flykt (30 s timeout gånger flera köade trådar blir annars en
+# lång kö). Bokföringen under låset är i praktiken omedelbar; väntan och
+# själva anropet sker utanför.
 _anropslas = threading.Lock()
-_senaste_anrop = 0.0
+_nasta_tillatna_start = 0.0
 
 
-def _vanta_pa_tur() -> None:
-    """Blockerar tills minst _MIN_INTERVALL_S gått sedan förra anropet. Anropas under _anropslas."""
-    global _senaste_anrop
-    nu = time.monotonic()
-    vantetid = _MIN_INTERVALL_S - (nu - _senaste_anrop)
-    if vantetid > 0:
-        time.sleep(vantetid)
-    _senaste_anrop = time.monotonic()
+def _reservera_starttid() -> float:
+    """Reserverar och returnerar nästa lediga starttid, minst _MIN_INTERVALL_S
+    efter föregående reserverade start. Håller låset bara för bokföringen."""
+    global _nasta_tillatna_start
+    with _anropslas:
+        start = max(time.monotonic(), _nasta_tillatna_start)
+        _nasta_tillatna_start = start + _MIN_INTERVALL_S
+    return start
 
 
 # ---------------------------------------------------------------------------
 # Lågnivå-HTTP
 # ---------------------------------------------------------------------------
 
-def _hamta_feed(params: list[tuple[str, str]]) -> ET.Element:
-    """Hämtar och tolkar ett Atom-svar. Kastar ArxivFel vid problem."""
-    with _anropslas:
-        _vanta_pa_tur()
-        try:
-            svar = _session.get(BASE_URL, params=params, timeout=TIMEOUT)
-        except requests.RequestException as exc:
-            raise ArxivFel(f"Kunde inte nå arXiv ({BASE_URL}): {exc}") from exc
+def _felpost_meddelande(root: ET.Element) -> str | None:
+    """Känner igen arXivs felpost och returnerar dess meddelande, annars None.
 
-    if svar.status_code != 200:
-        raise ArxivFel(f"arXiv svarade {svar.status_code}: {svar.text[:300]}")
-
-    try:
-        return ET.fromstring(svar.content)
-    except ET.ParseError as exc:
-        raise ArxivFel(f"arXiv gav ett svar som inte gick att tolka som XML: {exc}") from exc
-
-
-def _hamta_entries(root: ET.Element) -> list[ET.Element]:
-    """Plockar ut <entry>-elementen och känner igen arXivs felpost.
-
-    arXiv rapporterar ogiltiga frågor som en enda <entry> vars id pekar mot
-    arxiv.org/api/errors, i stället för en HTTP-felstatus.
+    arXiv rapporterar ogiltiga frågor (t.ex. ett ogiltigt sortBy-värde) som
+    en enda <entry> vars id pekar mot arxiv.org/api/errors — ibland med
+    HTTP 200, ibland med en 4xx-status. Tolkningen görs därför oavsett
+    statuskod, inte bara vid 200.
     """
     entries = root.findall("atom:entry", _NS)
     if len(entries) == 1:
         id_text = entries[0].findtext("atom:id", default="", namespaces=_NS) or ""
         if "arxiv.org/api/errors" in id_text:
             sammanfattning = entries[0].findtext("atom:summary", default="", namespaces=_NS) or ""
-            raise ArxivFel(f"arXiv avvisade frågan: {sammanfattning.strip() or id_text}")
-    return entries
+            return sammanfattning.strip() or id_text
+    return None
+
+
+def _hamta_feed(params: list[tuple[str, str]]) -> ET.Element:
+    """Hämtar och tolkar ett Atom-svar. Kastar ArxivFel vid problem."""
+    start = _reservera_starttid()
+    vantetid = start - time.monotonic()
+    if vantetid > 0:
+        time.sleep(vantetid)
+
+    try:
+        svar = _session.get(BASE_URL, params=params, timeout=TIMEOUT)
+    except requests.RequestException as exc:
+        raise ArxivFel(f"Kunde inte nå arXiv ({BASE_URL}): {exc}") from exc
+
+    # Felposten tolkas oavsett statuskod — ett ogiltigt sortBy-värde ger t.ex.
+    # HTTP 400 med felposten i kroppen, inte en tom eller icke-XML-kropp.
+    root: ET.Element | None
+    try:
+        root = ET.fromstring(svar.content)
+    except ET.ParseError:
+        root = None
+
+    if root is not None:
+        felmeddelande = _felpost_meddelande(root)
+        if felmeddelande:
+            raise ArxivFel(f"arXiv avvisade frågan: {felmeddelande}")
+
+    if svar.status_code != 200:
+        raise ArxivFel(f"arXiv svarade {svar.status_code}: {svar.text[:300]}")
+
+    if root is None:
+        raise ArxivFel("arXiv gav ett svar som inte gick att tolka som XML.")
+
+    return root
+
+
+def _hamta_entries(root: ET.Element) -> list[ET.Element]:
+    """Plockar ut <entry>-elementen. Felposten är redan hanterad i _hamta_feed."""
+    return root.findall("atom:entry", _NS)
 
 
 # ---------------------------------------------------------------------------
@@ -128,15 +163,18 @@ def normalisera_id(arxiv_id: str) -> tuple[str, int | None]:
     """Plockar ut det nakna arXiv-id:t och en eventuell version.
 
     Tar emot bara id:t ("2101.00001"), med version ("2101.00001v2"), med
-    "arXiv:"-prefix, eller en abs-URL. Returnerar (naket_id, version) där
-    version är None om ingen angavs (= senaste versionen).
+    "arXiv:"-prefix, en abs-URL eller en pdf-URL (med eller utan ".pdf" och
+    med eller utan version, t.ex. "https://arxiv.org/pdf/2101.00001v2.pdf").
+    Returnerar (naket_id, version) där version är None om ingen angavs
+    (= senaste versionen).
     """
     if not arxiv_id or not arxiv_id.strip():
         raise ArxivFel("Tomt arXiv-id angavs.")
 
     rensad = arxiv_id.strip()
-    rensad = re.sub(r"^https?://arxiv\.org/abs/", "", rensad)
+    rensad = re.sub(r"^https?://arxiv\.org/(abs|pdf)/", "", rensad)
     rensad = re.sub(r"^arxiv:", "", rensad, flags=re.IGNORECASE)
+    rensad = re.sub(r"\.pdf$", "", rensad, flags=re.IGNORECASE)
 
     traff = _VERSION_MONSTER.search(rensad)
     version = int(traff.group(1)) if traff else None
@@ -278,6 +316,14 @@ def sok(
     search_query = _bygg_search_query(q, kategori, fran_ar, till_ar)
     if not search_query:
         raise ArxivFel("Ange minst en av q, kategori, fran_ar eller till_ar.")
+    if sort_by and sort_by not in _GILTIGA_SORT_BY:
+        raise ArxivFel(
+            f"Ogiltigt sort_by '{sort_by}'. Giltiga värden: {', '.join(sorted(_GILTIGA_SORT_BY))}."
+        )
+    if sort_order and sort_order not in _GILTIGA_SORT_ORDER:
+        raise ArxivFel(
+            f"Ogiltigt sort_order '{sort_order}'. Giltiga värden: {', '.join(sorted(_GILTIGA_SORT_ORDER))}."
+        )
 
     params: list[tuple[str, str]] = [("search_query", search_query)]
     params.append(("start", str(max(0, start))))

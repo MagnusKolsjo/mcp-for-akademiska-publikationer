@@ -12,6 +12,18 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   Anropen mot arXiv strypas till högst ett var tredje sekund, enligt
   källans användarvillkor.
 
+### Rättat
+- `arxiv_client.py`: arXivs felpost (ogiltiga sökparametrar, t.ex. ett
+  ogiltigt `sortBy`-värde) tolkas nu oavsett HTTP-status, inte bara vid
+  200 — ett 400-svar gav tidigare rå Atom-XML som felmeddelande.
+  `sort_by`/`sort_order` valideras dessutom innan anropet.
+- `arxiv_client.py`: strypningen mot arXiv håller låset bara för att
+  reservera nästa starttid, inte under hela HTTP-anropet. Flera anrop kan
+  nu vara i flykt samtidigt så länge starterna ligger minst tre sekunder
+  isär, i stället för att köa bakom varandras hela svarstid.
+- `arxiv_client.normalisera_id`: hanterar nu även pdf-URL:er
+  (`arxiv.org/pdf/...`), med eller utan `.pdf`-ändelse och version.
+
 ### Ändrat
 - Migrerad till `mcp` 2.x (`MCPServer` i stället för `FastMCP`, `mcp>=2.0,<3`
   i `requirements.txt`).
