@@ -23,21 +23,24 @@ hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
 
 ## Datakällor
 
-- **Libris** — Sveriges nationella bibliotekskatalog (KB).
-  `https://libris.kb.se/find.jsonld` ([dokumentation](https://libris.kb.se/api/docs/reference/find/)),
-  samt `https://id.kb.se` för länkade ämnestermer.
-- **Crossref** — DOI-metadata för vetenskapliga artiklar, böcker och
-  konferensbidrag. `https://api.crossref.org/works`
-  ([dokumentation](https://www.crossref.org/documentation/retrieve-metadata/rest-api/)).
-- **DataCite** — DOI-metadata för forskningsdata, programvara och preprints.
-  `https://api.datacite.org/dois` ([dokumentation](https://support.datacite.org/docs/api)).
-- **arXiv** — preprints inom fysik, matematik, datavetenskap, biologi m.fl.
-  `https://export.arxiv.org/api/query`
-  ([dokumentation](https://info.arxiv.org/help/api/user-manual.html)). Klienten
-  begränsar sig till högst ett anrop var tredje sekund, enligt arXivs
-  [användarvillkor](https://info.arxiv.org/help/api/tou.html). I enlighet med
-  samma villkor: *Thank you to arXiv for use of its open access
-  interoperability.*
+| Källa | Täckning | Roll | Krav | Attribution/villkor |
+|---|---|---|---|---|
+| [Libris](https://libris.kb.se/api/docs/reference/find/) | Svenska bibliotekskatalogen (KB) | Sökbar, eget frågespråk | — | — |
+| [Crossref](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) | DOI:er: artiklar, böcker, konferensbidrag | Sökbar | — | `CROSSREF_MAILTO` ger polite pool (frivilligt) |
+| [DataCite](https://support.datacite.org/docs/api) | DOI:er: forskningsdata, programvara, preprints | Sökbar | — | — |
+| [arXiv](https://info.arxiv.org/help/api/user-manual.html) | Preprints: fysik, matematik, data, biologi m.fl. | Sökbar, eget frågespråk | — | Max 1 anrop/3 s ([villkor](https://info.arxiv.org/help/api/tou.html)); *"Thank you to arXiv for use of its open access interoperability."* |
+| [OpenAlex](https://docs.openalex.org/) | Brett index, samtliga ämnesfält | Sökbar | — | CC0. Kostnadsbaserat sedan feb 2026 — se `kostnad_usd` i svaret; `DISCOVERY_OPENALEX_API_NYCKEL` höjer det dagliga taket |
+| [Unpaywall](https://unpaywall.org/products/api) | Open access-status för en DOI | Berikning (`discovery_oa_lank`) | `DISCOVERY_KONTAKT_EPOST` | Ingen sökning (`/v2/search` är trasig hos källan och används inte) |
+| [Semantic Scholar](https://api.semanticscholar.org/api-docs/graph) | Citeringsgraf | Berikning (`discovery_citeringar`) | — (nyckel rekommenderas) | Attribution krävs, ingen vidaredistribution i bulk — uppfylls redan av en databasfri server |
+
+Fler källor (SwePub, DiVA, Publicera/KB, NVA, OSF Preprints, Europe PMC,
+zbMATH Open, EconBiz, HAL, DOAJ, CORE) är verifierade och planerade men
+**inte byggda ännu** — se CHANGELOG och Magnus egna anteckningar för status.
+
+Varje ny källa (allt utom Libris/Crossref/DataCite/arXiv) kan slås av eller
+på oberoende via `DISCOVERY_<KALLA>_AKTIV` i `.env`, utan kodändring. En
+källa som kräver en nyckel eller kontakt-e-post som saknas inaktiveras
+automatiskt — kör `discovery_kallor()` för att se aktiv-status och skälet.
 
 ## Installation
 
@@ -53,6 +56,9 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
 3. Kopiera `config.example.env` till `.env` och fyll i värdena. Sätt särskilt en
    egen `LIBRIS_USER_AGENT`, `DATACITE_USER_AGENT` och `ARXIV_USER_AGENT` med
    kontaktuppgift, och gärna `CROSSREF_MAILTO` för Crossrefs polite pool.
+   Sätt `DISCOVERY_KONTAKT_EPOST` till din egen adress (inte ett exempel —
+   flera källor avvisar uttryckligen testadresser) för att aktivera
+   Unpaywall och höja OpenAlex artighetspool.
 4. Lägg till servern i MCP-klientens konfiguration, t.ex.:
    ```json
    {
@@ -69,8 +75,11 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
 
 | Verktyg | Beskrivning |
 |---|---|
-| `discovery_sok` | Sök Crossref, DataCite och arXiv samtidigt; sammanslagna, normaliserade träffar. |
-| `discovery_kallor` | Lista de DOI-källor som ingår i den enade sökningen. |
+| `discovery_sok` | Sök alla aktiva källor samtidigt; sammanslagna, deduplicerade träffar. |
+| `discovery_hamta` | Läs en enskild post från en namngiven källa. |
+| `discovery_kallor` | Lista källor: aktiv-status, filterstöd, avstängningsskäl. |
+| `discovery_oa_lank` | Öppen tillgång-länk för en DOI (OpenAlex + Unpaywall). |
+| `discovery_citeringar` | Citeringsgraf för en post (OpenAlex + Semantic Scholar). |
 | `cr_sok` | Sök Crossref (artiklar m.m.), med fält- och årsfilter. |
 | `cr_hamta` | Läs ett verk i Crossref via DOI (kort eller full). |
 | `dc_sok` | Sök DataCite (forskningsdata m.m.), med typ-, års- och utgivarfilter. |
@@ -84,11 +93,13 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
 
 ### Typiska flöden
 
-Bred sökning över DOI-källorna:
+Bred sökning över alla aktiva källor:
 
-1. `discovery_kallor()` → se vilka källor som finns.
-2. `discovery_sok(q="machine learning fairness", fran_ar=2020)` → sammanslagna träffar med `doi` och `kalla`.
-3. `cr_hamta(doi)` eller `dc_hamta(doi, format="full")` → läs hela posten.
+1. `discovery_kallor()` → se vilka källor som är aktiva.
+2. `discovery_sok(q="machine learning fairness", fran_ar=2020)` → sammanslagna, deduplicerade träffar med `doi` och `kalla`.
+3. `discovery_hamta(kalla="openalex", id=doi)` → läs hela posten från den källa som gav bäst träff.
+4. `discovery_oa_lank(doi)` → hitta en öppet tillgänglig kopia.
+5. `discovery_citeringar(id=doi, riktning="citerande")` → vad citerar verket, och vad citeras av det.
 
 Käll-specifik sökning:
 
@@ -98,12 +109,20 @@ Käll-specifik sökning:
 
 ## Lägga till en ny källa
 
-Discovery är byggd för att kopplas på fler källor. Mönstret:
+Discovery är byggd för att kopplas på fler källor. Mönstret för en ny,
+av/på-bar källa (allt utom Libris/Crossref/DataCite/arXiv, som har ett äldre
+inline-mönster sedan innan av/på-systemet fanns):
 
-1. Skriv `<namn>_client.py` med en `sok()` som returnerar normaliserade träffar
-   och en `hamta()`, plus en egen felklass — som `crossref_client.py`.
-2. Registrera källan i `providers.py` om den ska ingå i `discovery_sok`.
-3. Exponera käll-specifika verktyg i `mcp_server.py` om källan har egna filter.
+1. Skriv `<namn>_client.py` med `sok()`/`hamta()` som returnerar dictar med
+   minst `kalla`/`doi`/`titel` (se `openalex_client.py`), en egen felklass
+   som ärver `kallhjalp.DiscoveryKallaFel`, User-Agent via
+   `kallkonfig.user_agent(...)` och takt via `kallhjalp.ny_taktbegransare(...)`.
+2. Lägg till en rad i `providers.PROVIDERS` (sökbar källa) eller
+   `providers.BERIKNING` (svarar bara på frågor om en redan känd post), med
+   `aktiv` kopplat till `kallkonfig.aktiv(namn)` och `krav_saknas` om källan
+   kräver en nyckel eller e-post.
+3. Dokumentera källan i README:s källtabell och i `config.example.env`
+   (`DISCOVERY_<NAMN>_AKTIV`, ev. `DISCOVERY_<NAMN>_API_NYCKEL`).
 
 ## Transport
 

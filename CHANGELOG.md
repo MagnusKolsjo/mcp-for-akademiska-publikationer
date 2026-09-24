@@ -11,6 +11,36 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   `discovery_sok`/`discovery_kallor` tillsammans med Crossref och DataCite.
   Anropen mot arXiv strypas till högst ett var tredje sekund, enligt
   källans användarvillkor.
+- OpenAlex som ny, sökbar källa (`openalex_client.py`): brett index över
+  samtliga ämnesfält, med filter på ämne (`primary_topic.field.id`,
+  `topics.id`), institutionsland, öppen tillgång och utgivningsår. Deltar i
+  `discovery_sok`. Kostnadsbaserat sedan februari 2026 — varje svar
+  innehåller `kostnad_usd` ur källans egna `meta.cost_usd`.
+- Unpaywall (`unpaywall_client.py`) och Semantic Scholar
+  (`semanticscholar_client.py`) som berikningskällor: svarar bara på frågor
+  om en redan känd DOI/id (open access-länk respektive citeringsgraf),
+  deltar inte i `discovery_sok`. Unpaywall kräver
+  `DISCOVERY_KONTAKT_EPOST` och stängs av automatiskt utan den.
+- Tre nya verktyg: `discovery_hamta(kalla, id)` (läs en post från en
+  namngiven källa), `discovery_oa_lank(doi)` (öppen tillgång-länk via
+  OpenAlex + Unpaywall) och `discovery_citeringar(id, riktning)`
+  (citeringsgraf via OpenAlex + Semantic Scholar).
+- `discovery_sok` utökad med `oppen_tillgang`, `land` och `filter`
+  (källspecifika råfilter); resultatet dedupliceras nu på DOI. Källorna
+  frågas parallellt (en tråd per källa) med en delad tidsgräns på 15 s per
+  källa — en långsam eller nedgången källa fördröjer inte de andra.
+- Nya källor kan slås av/på oberoende i `.env` via
+  `DISCOVERY_<KALLA>_AKTIV`, utan kodändring (gäller inte Libris/Crossref/
+  DataCite/arXiv, som behålls oförändrade). En källa som kräver en nyckel
+  eller `DISCOVERY_KONTAKT_EPOST` den saknar inaktiveras automatiskt, med
+  förklaring i `discovery_kallor`. Ny gemensam infrastruktur för detta:
+  `kallkonfig.py` (av/på, nycklar, User-Agent, kontakt-e-post) och
+  `kallhjalp.py` (taktbegränsare, gemensam felbasklass).
+
+### Kända begränsningar
+- SwePub, DiVA, Publicera (KB), NVA, OSF Preprints, Europe PMC, zbMATH
+  Open, EconBiz, HAL, DOAJ och CORE är planerade men **inte byggda än** —
+  se Magnus egna anteckningar för status och prioritetsordning.
 
 ### Rättat
 - `arxiv_client.py`: arXivs felpost (ogiltiga sökparametrar, t.ex. ett
