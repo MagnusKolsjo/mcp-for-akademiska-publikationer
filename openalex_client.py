@@ -65,8 +65,12 @@ def _hamta(path: str, params: dict) -> dict:
     except requests.RequestException as exc:
         raise OpenAlexFel(f"Kunde inte nå OpenAlex ({BASE_URL}{path}): {exc}") from exc
 
+    if svar.status_code == 404:
+        raise OpenAlexFel(f"OpenAlex har ingen post för {path}.")
     if svar.status_code != 200:
-        raise OpenAlexFel(f"OpenAlex svarade {svar.status_code}: {svar.text[:300]}")
+        # OpenAlex svarar ibland med en HTML-sida; den säger inget för användaren.
+        detalj = "" if svar.text.lstrip().startswith("<") else f": {svar.text[:300]}"
+        raise OpenAlexFel(f"OpenAlex svarade {svar.status_code}{detalj}")
     try:
         return svar.json()
     except ValueError as exc:
