@@ -32,15 +32,32 @@ hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
 | [OpenAlex](https://docs.openalex.org/) | Brett index, samtliga ämnesfält | Sökbar | — | CC0. Kostnadsbaserat sedan feb 2026 — se `kostnad_usd` i svaret; `DISCOVERY_OPENALEX_API_NYCKEL` höjer det dagliga taket |
 | [Unpaywall](https://unpaywall.org/products/api) | Open access-status för en DOI | Berikning (`discovery_oa_lank`) | `DISCOVERY_KONTAKT_EPOST` | Ingen sökning (`/v2/search` är trasig hos källan och används inte) |
 | [Semantic Scholar](https://api.semanticscholar.org/api-docs/graph) | Citeringsgraf | Berikning (`discovery_citeringar`) | — (nyckel rekommenderas) | Attribution krävs, ingen vidaredistribution i bulk — uppfylls redan av en databasfri server |
-
-Fler källor (SwePub, DiVA, Publicera/KB, NVA, OSF Preprints, Europe PMC,
-zbMATH Open, EconBiz, HAL, DOAJ, CORE) är verifierade och planerade men
-**inte byggda ännu** — se CHANGELOG och Magnus egna anteckningar för status.
+| [SwePub](https://www.kb.se) (Libris Xsearch) | Svenska lärosäten/myndigheter | Sökbar (ingen `hamta`) | — | — |
+| [DiVA](https://www.diva-portal.org) | ~50 svenska lärosäten/myndigheter | Sökbar | — | Egen `DIVA_USER_AGENT` (källans WAF blockerar UA-strängar som börjar med "Discovery") |
+| [Publicera](https://publicera.kb.se) (KB) | Svenska OJS-tidskrifter | Sökbar (via OpenAlex, 46/55 tidskrifter) | — | Botskyddet Anubis — identifierbar UA krävs, aldrig webbläsarlik |
+| [NVA](https://nva.sikt.no) | Norska lärosäten | Sökbar | — | Identifierbar User-Agent efterfrågas — `DISCOVERY_KONTAKT_EPOST` bakas in |
+| [OSF Preprints](https://osf.io/preprints) | SocArXiv/LawArXiv/EdArXiv m.fl. | Sökbar (titel, en leverantör/anrop) | — (token rekommenderas) | 100 anrop/timme delat utan token |
+| [Europe PMC](https://europepmc.org) | Biomedicin, life science | Sökbar | — | — |
+| [zbMATH Open](https://zbmath.org) | Matematik, MSC-klassificerat | Sökbar | — | Bibliografi CC0, recensioner CC BY-SA 4.0 |
+| [EconBiz](https://www.econbiz.de) (ZBW) | Nationalekonomi, working papers | Sökbar | — | Ingen massnedladdning |
+| [HAL](https://hal.science) | Franskt öppet arkiv, humaniora/samhällsvetenskap | Sökbar | — | — |
+| [DOAJ](https://doaj.org) | Granskade open access-tidskrifter | Sökbar | — | CC0 |
+| [CORE](https://core.ac.uk) | Aggregerad fulltext/metadata | Sökbar, **avstängd som standard** | — (nyckel rekommenderas) | Icke-kommersiell fri nivå |
 
 Varje ny källa (allt utom Libris/Crossref/DataCite/arXiv) kan slås av eller
 på oberoende via `DISCOVERY_<KALLA>_AKTIV` i `.env`, utan kodändring. En
 källa som kräver en nyckel eller kontakt-e-post som saknas inaktiveras
 automatiskt — kör `discovery_kallor()` för att se aktiv-status och skälet.
+CORE är av som standard; sätt `DISCOVERY_CORE_AKTIV=true` för att slå på.
+
+**Publicera-tidskrifternas ISSN:** `stream-11-publicera-kb/tidskrifter.json`
+har bara `spec`/`namn`, ingen ISSN. `publicera_tidskrifter.json` i det här
+repot togs fram genom att slå upp varje tidskriftsnamn mot OpenAlex
+`/sources` och kräva en namnlikhet på minst 0,85 (`difflib.SequenceMatcher`)
+innan träffen accepterades — ett engångsuppslag, inte något som körs vid
+serverstart. 46 av 55 tidskrifter fick en ISSN; resten (bl.a. "Publicera
+Support", som inte är en riktig tidskrift) täcks inte av `publicera_sok`
+förrän de kompletteras manuellt.
 
 ## Installation
 
@@ -58,7 +75,9 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
    kontaktuppgift, och gärna `CROSSREF_MAILTO` för Crossrefs polite pool.
    Sätt `DISCOVERY_KONTAKT_EPOST` till din egen adress (inte ett exempel —
    flera källor avvisar uttryckligen testadresser) för att aktivera
-   Unpaywall och höja OpenAlex artighetspool.
+   Unpaywall, höja OpenAlex artighetspool och identifiera dig mot NVA.
+   `DISCOVERY_OSF_API_NYCKEL`/`DISCOVERY_CORE_API_NYCKEL` är valfria men
+   höjer annars hårt begränsade kvoter (se källtabellen ovan).
 4. Lägg till servern i MCP-klientens konfiguration, t.ex.:
    ```json
    {
