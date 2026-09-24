@@ -39,6 +39,7 @@ import datacite_client
 import kallkonfig
 import openalex_client
 import semanticscholar_client
+import swepub_client
 import unpaywall_client
 from kallhjalp import DiscoveryKallaFel
 
@@ -133,6 +134,11 @@ def _doi_kalla_hamta(client):
     return _hamta
 
 
+def _swepub_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    """SwePub/Xsearch stödjer bara fritext — övriga parametrar ignoreras."""
+    return swepub_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return openalex_client.sok(
         q,
@@ -199,6 +205,16 @@ PROVIDERS: dict[str, dict] = {
             "authorships.institutions.country_code",
             "open_access.is_oa", "open_access.oa_status", "publication_year",
         ],
+    },
+    "swepub": {
+        "etikett": "SwePub",
+        "beskrivning": "Publikationer från svenska lärosäten och myndigheter (Libris Xsearch).",
+        "sok": _swepub_sok,
+        "hamta": None,  # Xsearch saknar dokumenterad hämtning av en enskild känd post.
+        "fel": swepub_client.SwePubFel,
+        "aktiv": kallkonfig.aktiv("swepub"),
+        "krav_saknas": None,
+        "filterstod": [],
     },
 }
 
