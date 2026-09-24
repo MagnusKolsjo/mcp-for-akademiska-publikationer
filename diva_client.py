@@ -37,7 +37,7 @@ BASE_URL = os.environ.get("DIVA_BASE_URL", "https://www.diva-portal.org/smash/ex
 # i stället; DIVA_USER_AGENT överstyr som vanligt.
 USER_AGENT = os.environ.get(
     "DIVA_USER_AGENT",
-    "SciSearchMCP/0.1 (+https://github.com/MagnusKolsjo/discovery-mcp)",
+    "MagnusKolsjo-Discovery-MCP/0.1 (+https://github.com/MagnusKolsjo/discovery-mcp)",
 )
 TIMEOUT = float(os.environ.get("DIVA_TIMEOUT", "30"))
 
