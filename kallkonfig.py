@@ -39,10 +39,23 @@ _STANDARD_USER_AGENT = os.environ.get(
 )
 
 
-def aktiv(kalla: str) -> bool:
-    """True om DISCOVERY_<KALLA>_AKTIV inte uttryckligen är satt till falskt."""
-    varde = os.environ.get(f"DISCOVERY_{kalla.upper()}_AKTIV", "true").strip().lower()
-    return varde not in ("false", "0", "nej", "av")
+_SANT = ("true", "1", "ja", "på")
+_FALSKT = ("false", "0", "nej", "av")
+
+
+def aktiv(kalla: str, *, standard: bool = True) -> bool:
+    """DISCOVERY_<KALLA>_AKTIV som bool, annars `standard`.
+
+    De flesta källor är på som standard (fungerar utan nyckel/registrering).
+    En källa som bör vara avstängd tills installatören medvetet slår på den
+    (t.ex. CORE — se dess klientmodul) anger standard=False.
+    """
+    varde = os.environ.get(f"DISCOVERY_{kalla.upper()}_AKTIV", "").strip().lower()
+    if varde in _SANT:
+        return True
+    if varde in _FALSKT:
+        return False
+    return standard
 
 
 def api_nyckel(kalla: str) -> str:

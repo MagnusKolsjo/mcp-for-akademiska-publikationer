@@ -36,6 +36,7 @@ import time
 import arxiv_client
 import crossref_client
 import datacite_client
+import core_client
 import diva_client
 import doaj_client
 import econbiz_client
@@ -198,6 +199,10 @@ def _hal_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
 
 def _doaj_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return doaj_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
+def _core_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    return core_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
 
 
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
@@ -368,6 +373,16 @@ PROVIDERS: dict[str, dict] = {
         "hamta": lambda id_: doaj_client.hamta(id_),
         "fel": doaj_client.DoajFel,
         "aktiv": kallkonfig.aktiv("doaj"),
+        "krav_saknas": None,
+        "filterstod": [],
+    },
+    "core": {
+        "etikett": "CORE",
+        "beskrivning": "Aggregerad fulltext/metadata från open access-arkiv världen över. Avstängd som standard.",
+        "sok": _core_sok,
+        "hamta": lambda id_: core_client.hamta(id_),
+        "fel": core_client.CoreFel,
+        "aktiv": kallkonfig.aktiv("core", standard=False),
         "krav_saknas": None,
         "filterstod": [],
     },
