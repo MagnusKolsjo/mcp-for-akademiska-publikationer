@@ -37,10 +37,34 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   `kallkonfig.py` (av/på, nycklar, User-Agent, kontakt-e-post) och
   `kallhjalp.py` (taktbegränsare, gemensam felbasklass).
 
+- Elva ytterligare källor: SwePub (Libris Xsearch), DiVA (export.jsf,
+  förenklad från stream-12-diva-portal), Publicera/KB (sökning via en
+  OpenAlex-fråga begränsad till 46 av 55 identifierade tidskrifts-ISSN,
+  hämtning äkta via OAI-PMH GetRecord med samma Anubis-igenkänning som
+  stream-11-publicera-kb), NVA (Norge), OSF Preprints (titelsökning, en
+  leverantör per anrop), Europe PMC, zbMATH Open, EconBiz, HAL, DOAJ och
+  CORE (avstängd som standard, `DISCOVERY_CORE_AKTIV=true` slår på den).
+  Samtliga deltar i `discovery_sok`/`discovery_hamta` via samma register
+  i `providers.py`.
+- `publicera_tidskrifter.json`: ISSN/eISSN för Publicera-tidskrifterna,
+  eftersom `stream-11-publicera-kb/tidskrifter.json` saknar ISSN helt.
+  Togs fram genom ett engångsuppslag av varje tidskriftsnamn mot OpenAlex
+  `/sources` (namnlikhet ≥ 0,85 krävdes för att acceptera en träff);
+  46 av 55 tidskrifter fick en ISSN.
+- `kallkonfig.aktiv()` har fått en `standard=`-parameter så att en källa
+  (CORE) kan vara av som standard medan övriga är på.
+
 ### Kända begränsningar
-- SwePub, DiVA, Publicera (KB), NVA, OSF Preprints, Europe PMC, zbMATH
-  Open, EconBiz, HAL, DOAJ och CORE är planerade men **inte byggda än** —
-  se Magnus egna anteckningar för status och prioritetsordning.
+- SwePub saknar `hamta()` — Xsearch har ingen dokumenterad hämtning av en
+  enskild känd post.
+- Publicera-sökningen täcker bara 46 av 55 tidskrifter (de utan
+  identifierad ISSN); se `publicera_tidskrifter.json`.
+- OSF Preprints: författarnamn utelämnas (kräver ett extra nästlat
+  embed-anrop per träff), och `filter[provider]` matchar bara en
+  preprintserver per anrop, inte en lista.
+- DiVA:s klient använder ett annat User-Agent-standardvärde än övriga nya
+  källor, eftersom DiVA:s WAF blockerar strängar som börjar med
+  "Discovery" (verifierat) — se `diva_client.py`.
 
 ### Rättat
 - `arxiv_client.py`: arXivs felpost (ogiltiga sökparametrar, t.ex. ett
