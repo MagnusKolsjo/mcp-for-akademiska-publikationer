@@ -39,6 +39,7 @@ import datacite_client
 import diva_client
 import econbiz_client
 import europepmc_client
+import hal_client
 import kallkonfig
 import nva_client
 import openalex_client
@@ -190,6 +191,10 @@ def _econbiz_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter)
     return econbiz_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
 
 
+def _hal_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    return hal_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return openalex_client.sok(
         q,
@@ -338,6 +343,16 @@ PROVIDERS: dict[str, dict] = {
         "hamta": lambda id_: econbiz_client.hamta(id_),
         "fel": econbiz_client.EconBizFel,
         "aktiv": kallkonfig.aktiv("econbiz"),
+        "krav_saknas": None,
+        "filterstod": [],
+    },
+    "hal": {
+        "etikett": "HAL",
+        "beskrivning": "Frankrikes öppna arkiv, starkt inom humaniora/samhällsvetenskap (HAL-SHS: bl.a. arkeologi).",
+        "sok": _hal_sok,
+        "hamta": lambda id_: hal_client.hamta(id_),
+        "fel": hal_client.HalFel,
+        "aktiv": kallkonfig.aktiv("hal"),
         "krav_saknas": None,
         "filterstod": [],
     },
