@@ -40,6 +40,7 @@ import diva_client
 import kallkonfig
 import nva_client
 import openalex_client
+import osf_client
 import publicera_client
 import semanticscholar_client
 import swepub_client
@@ -167,6 +168,13 @@ def _nva_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return nva_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
 
 
+def _osf_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    """kalla_filter kan innehålla {"leverantor": "lawarxiv"} för att byta
+    preprintserver — se osf_client.sok()."""
+    leverantor = (kalla_filter or {}).get("leverantor")
+    return osf_client.sok(q, limit=limit, leverantor=leverantor)
+
+
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return openalex_client.sok(
         q,
@@ -277,6 +285,16 @@ PROVIDERS: dict[str, dict] = {
         "aktiv": kallkonfig.aktiv("nva"),
         "krav_saknas": None,
         "filterstod": [],
+    },
+    "osf": {
+        "etikett": "OSF Preprints",
+        "beskrivning": "Ämnesinriktade preprintservrar (SocArXiv, LawArXiv, EdArXiv m.fl.), titelsökning.",
+        "sok": _osf_sok,
+        "hamta": lambda id_: osf_client.hamta(id_),
+        "fel": osf_client.OsfFel,
+        "aktiv": kallkonfig.aktiv("osf"),
+        "krav_saknas": None,
+        "filterstod": ["leverantor"],
     },
 }
 
