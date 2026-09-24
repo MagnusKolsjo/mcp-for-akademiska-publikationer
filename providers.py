@@ -37,6 +37,7 @@ import arxiv_client
 import crossref_client
 import datacite_client
 import diva_client
+import doaj_client
 import econbiz_client
 import europepmc_client
 import hal_client
@@ -193,6 +194,10 @@ def _econbiz_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter)
 
 def _hal_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return hal_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
+def _doaj_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    return doaj_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
 
 
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
@@ -353,6 +358,16 @@ PROVIDERS: dict[str, dict] = {
         "hamta": lambda id_: hal_client.hamta(id_),
         "fel": hal_client.HalFel,
         "aktiv": kallkonfig.aktiv("hal"),
+        "krav_saknas": None,
+        "filterstod": [],
+    },
+    "doaj": {
+        "etikett": "DOAJ",
+        "beskrivning": "Granskade open access-tidskrifter, alla ämnesfält.",
+        "sok": _doaj_sok,
+        "hamta": lambda id_: doaj_client.hamta(id_),
+        "fel": doaj_client.DoajFel,
+        "aktiv": kallkonfig.aktiv("doaj"),
         "krav_saknas": None,
         "filterstod": [],
     },
