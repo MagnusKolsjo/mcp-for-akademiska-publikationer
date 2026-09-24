@@ -36,6 +36,7 @@ import time
 import arxiv_client
 import crossref_client
 import datacite_client
+import diva_client
 import kallkonfig
 import openalex_client
 import semanticscholar_client
@@ -139,6 +140,15 @@ def _swepub_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return swepub_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
 
 
+def _diva_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    """DiVA stödjer inte land-filtrering i den här klienten."""
+    return diva_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar, oppen_tillgang=oppen_tillgang)
+
+
+def _diva_hamta(id_: str) -> dict:
+    return diva_client.hamta(id_)
+
+
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return openalex_client.sok(
         q,
@@ -215,6 +225,16 @@ PROVIDERS: dict[str, dict] = {
         "aktiv": kallkonfig.aktiv("swepub"),
         "krav_saknas": None,
         "filterstod": [],
+    },
+    "diva": {
+        "etikett": "DiVA",
+        "beskrivning": "~50 svenska lärosäten/myndigheter: avhandlingar, artiklar, rapporter, examensarbeten.",
+        "sok": _diva_sok,
+        "hamta": _diva_hamta,
+        "fel": diva_client.DivaFel,
+        "aktiv": kallkonfig.aktiv("diva"),
+        "krav_saknas": None,
+        "filterstod": ["oppen_tillgang"],
     },
 }
 
