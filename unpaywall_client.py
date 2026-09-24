@@ -76,12 +76,18 @@ def hamta(doi: str) -> dict:
             timeout=TIMEOUT,
         )
     except requests.RequestException as exc:
-        raise UnpaywallFel(f"Kunde inte nå Unpaywall ({BASE_URL}): {exc}") from exc
+        # Bara feltypen, inte hela undantagstexten — den kan innehålla hela
+        # anropsadressen med e-posten i querysträngen (requests bakar ofta
+        # in URL:en i sina egna undantagsmeddelanden).
+        raise UnpaywallFel(
+            f"Kunde inte nå Unpaywall ({BASE_URL}/{naken}): {type(exc).__name__}"
+        ) from exc
 
     if svar.status_code == 404:
         raise UnpaywallFel(f"Unpaywall känner inte igen DOI:n '{doi}'.")
     if svar.status_code != 200:
-        raise UnpaywallFel(f"Unpaywall svarade {svar.status_code}: {svar.text[:300]}")
+        detalj = svar.text[:300].replace(kallkonfig.KONTAKT_EPOST, "<e-post>")
+        raise UnpaywallFel(f"Unpaywall svarade {svar.status_code}: {detalj}")
 
     try:
         data = svar.json()
