@@ -20,9 +20,11 @@ Källor och verktyg:
   arXiv (preprints inom fysik, matematik, datavetenskap m.fl.)
     arxiv_sok           - sök preprints, med fältprefix, kategori och årsfilter
     arxiv_hamta         - läs en preprint via dess arXiv-id
-  Enad sökning över flera källor (se providers.py för hela källregistret,
-  bl.a. OpenAlex; Unpaywall och Semantic Scholar används bara som
-  berikningskällor för discovery_oa_lank/discovery_citeringar)
+  Enad sökning över flera källor (se providers.py för hela källregistret:
+  OpenAlex, SwePub, DiVA, Publicera, NVA, OSF Preprints, Europe PMC,
+  zbMATH Open, EconBiz, HAL, DOAJ och CORE (avstängd som standard) utöver
+  Crossref/DataCite/arXiv ovan; Unpaywall och Semantic Scholar används bara
+  som berikningskällor för discovery_oa_lank/discovery_citeringar)
     discovery_sok       - sök flera källor samtidigt, sammanslaget och deduplicerat
     discovery_hamta     - läs en enskild post från en namngiven källa
     discovery_kallor    - lista alla källor: aktiva, filterstöd, avstängningsskäl
