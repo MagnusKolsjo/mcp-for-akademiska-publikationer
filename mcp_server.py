@@ -20,11 +20,20 @@ Källor och verktyg:
   arXiv (preprints inom fysik, matematik, datavetenskap m.fl.)
     arxiv_sok           - sök preprints, med fältprefix, kategori och årsfilter
     arxiv_hamta         - läs en preprint via dess arXiv-id
-  Enad sökning över DOI-källorna
-    discovery_sok       - sök Crossref, DataCite och arXiv samtidigt, sammanslaget
-    discovery_kallor    - lista de källor som ingår i den enade sökningen
+  Enad sökning över flera källor (se providers.py för hela källregistret,
+  bl.a. OpenAlex; Unpaywall och Semantic Scholar används bara som
+  berikningskällor för discovery_oa_lank/discovery_citeringar)
+    discovery_sok       - sök flera källor samtidigt, sammanslaget och deduplicerat
+    discovery_hamta     - läs en enskild post från en namngiven källa
+    discovery_kallor    - lista alla källor: aktiva, filterstöd, avstängningsskäl
+    discovery_oa_lank   - öppen tillgång-länk för en DOI (OpenAlex + Unpaywall)
+    discovery_citeringar- citeringsgraf för en post (OpenAlex + Semantic Scholar)
 
-Nya källor kopplas in via providers.py — se den modulen för mönstret.
+Nya källor kopplas in via providers.py — se den modulen för mönstret. Varje
+ny källa (allt utom Libris/Crossref/DataCite/arXiv, som behålls oförändrade)
+kan slås av/på oberoende via DISCOVERY_<KALLA>_AKTIV i .env; en källa som
+kräver en nyckel eller kontakt-e-post den saknar inaktiveras automatiskt
+— se discovery_kallor.
 
 arXivs användarvillkor (https://info.arxiv.org/help/api/tou.html) ber om
 erkännandet "Thank you to arXiv for use of its open access
@@ -60,11 +69,13 @@ from mcp_transport import starta
 mcp = MCPServer(
     "discovery",
     instructions=(
-        "Sök publikationer och deras metadata över flera källor: Libris "
-        "(svenska bibliotekskatalogen), Crossref, DataCite och arXiv "
-        "(DOI-metadata respektive preprints). discovery_sok slår mot "
-        "Crossref, DataCite och arXiv samtidigt; libris_sok har ett eget, "
-        "rikare frågespråk och egna verktyg."
+        "Sök vetenskapligt material brett över flera källor: Libris (svenska "
+        "bibliotekskatalogen), Crossref, DataCite, arXiv och OpenAlex, med "
+        "Unpaywall och Semantic Scholar som berikning för öppna länkar och "
+        "citeringar. discovery_sok slår mot alla aktiva källor samtidigt och "
+        "deduplicerar på DOI; discovery_kallor visar vilka källor som är "
+        "aktiva och varför en källa kan vara avstängd. libris_sok/cr_sok/"
+        "dc_sok/arxiv_sok har egna, rikare frågespråk för käll-specifika filter."
     ),
     version="0.1.0",
     cache_hints=CACHE_HINTAR,
@@ -145,6 +156,18 @@ class ArxivSokResultat(TypedDict):
     start: int
     antal: int
     traffar: list[ArxivTraff]
+
+
+class DiscoveryOaLankResultat(TypedDict):
+    doi: str
+    kallor: dict[str, dict[str, Any]]
+    oa_lank: str | None
+
+
+class DiscoveryCiteringarResultat(TypedDict):
+    id: str
+    riktning: str
+    kallor: dict[str, dict[str, Any]]
 
 
 # ===========================================================================
@@ -494,37 +517,48 @@ def arxiv_hamta(arxiv_id: str, format: str = "kort") -> ArxivTraff:
 
 
 # ===========================================================================
-# Enad sökning över DOI-källorna
+# Enad sökning över flera källor
 # ===========================================================================
 
-@mcp.tool(title="Sök flera DOI-källor samtidigt", annotations=LASNING_EXTERN)
+@mcp.tool(title="Sök flera källor samtidigt", annotations=LASNING_EXTERN)
 def discovery_sok(
     q: str,
     kallor: list[str] | None = None,
     limit_per_kalla: int = 10,
     fran_ar: int = 0,
     till_ar: int = 0,
+    oppen_tillgang: bool | None = None,
+    land: str = "",
+    filter: dict[str, dict] | None = None,
 ) -> DiscoverySokResultat:
-    """Sök flera DOI-källor samtidigt och få sammanslagna, normaliserade träffar.
+    """Sök flera källor samtidigt och få sammanslagna, deduplicerade träffar.
 
-    Slår mot Crossref, DataCite och arXiv (eller en delmängd) i ett anrop och
-    returnerar en gemensam träfflista där varje träff är taggad med sin källa.
-    Bra som första bred sökning; använd käll-verktygen (cr_sok, dc_sok,
-    arxiv_sok) för käll-specifika filter.
+    Slår parallellt mot alla aktiva källor (eller en delmängd) och returnerar
+    en gemensam träfflista, deduplicerad på DOI. Bra som första bred sökning;
+    använd käll-verktygen (cr_sok, dc_sok, arxiv_sok) för käll-specifika filter
+    som inte täcks här.
 
     Parametrar:
       q               - fritextfråga som skickas till varje vald källa.
-      kallor          - lista med källnamn ("crossref", "datacite", "arxiv").
-                        Utelämnad = alla. Se discovery_kallor.
+      kallor          - lista med källnamn, t.ex. ["crossref", "openalex"].
+                        Utelämnad = alla aktiva källor. Se discovery_kallor.
       limit_per_kalla - max antal träffar per källa innan sammanslagning
                         (standard 10).
       fran_ar         - tidigaste utgivningsår (inklusive; för arXiv tolkas
                         det som inskickningsår).
       till_ar         - senaste utgivningsår (inklusive; se ovan).
+      oppen_tillgang  - True/False för att bara visa öppen/stängd tillgång.
+                        Stöds bara av vissa källor (se discovery_kallor);
+                        ignoreras av övriga.
+      land            - ISO-landskod för författarnas institutioner, t.ex.
+                        "SE". Stöds som ovan bara av vissa källor.
+      filter          - källspecifika råfilter: {"openalex": {"topics.id": "..."}}.
 
-    Varje träff har fälten: kalla, doi, titel, forfattare, ar, typ, utgivare,
-    container, url, citeringar. Resultatet sorteras med nyast först. En källa som
-    fallerar stoppar inte de andra — dess fel rapporteras under "fel".
+    Varje träff har fälten: kalla, kalla_id, doi, titel, forfattare, ar, typ,
+    url, oa_lank, citeringar. Resultatet sorteras med nyast först. En källa
+    som fallerar eller svarar för långsamt stoppar inte de andra — dess fel
+    rapporteras under "fel", och svarstiden per lyckad källa under
+    "per_kalla".
     """
     try:
         return providers.sok_alla(
@@ -533,21 +567,89 @@ def discovery_sok(
             limit_per_kalla=limit_per_kalla,
             fran_ar=fran_ar or None,
             till_ar=till_ar or None,
+            oppen_tillgang=oppen_tillgang,
+            land=land or None,
+            filter=filter,
         )
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
 
 
+@mcp.tool(title="Läs en post från en discovery-källa", annotations=LASNING_EXTERN)
+def discovery_hamta(kalla: str, id: str) -> dict[str, Any]:
+    """Läs en enskild post från en namngiven källa (se discovery_kallor).
+
+    kalla - källnamn, t.ex. "openalex", "crossref", "datacite", "arxiv".
+    id    - källans egna id eller DOI, beroende på källa (kalla_id/doi ur
+            en tidigare discovery_sok-träff fungerar alltid).
+
+    Returnerar samma gemensamma träffschema som discovery_sok. En okänd
+    källa, en avstängd källa eller ett okänt id ger ett begripligt fel.
+    """
+    try:
+        return providers.hamta_fran_kalla(kalla, id)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
+    except tuple(p["fel"] for p in providers.PROVIDERS.values()) as exc:
+        raise ToolError(str(exc)) from exc
+
+
 @mcp.tool(title="Lista discovery-källor", annotations=LASNING_DB)
 def discovery_kallor() -> DiscoveryKallorResultat:
-    """Lista de DOI-källor som ingår i den enade sökningen (discovery_sok).
+    """Lista alla discovery-källor: sökbara källor och berikningskällor.
 
-    Returnerar varje källas namn (att använda i discovery_sok), en etikett och
-    en kort beskrivning av vad källan täcker.
+    Sökbara källor (fältet "kallor") deltar i discovery_sok och kan hämtas
+    via discovery_hamta; varje post visar aktiv-status och filterstöd.
+    Berikningskällor (fältet "berikningskallor") används bara av
+    discovery_oa_lank/discovery_citeringar, inte av discovery_sok.
+
+    En källa som kräver en nyckel eller kontakt-e-post som saknas i .env
+    är "aktiv": false med en förklaring i "inaktiverad_orsak".
 
     Listan är inbyggd i servern (providers.py), inte hämtad över nätet.
     """
     return providers.lista_kallor()
+
+
+# ===========================================================================
+# Berikning: öppen tillgång och citeringar
+# ===========================================================================
+
+@mcp.tool(title="Hitta öppen tillgång-länk för en DOI", annotations=LASNING_EXTERN)
+def discovery_oa_lank(doi: str) -> DiscoveryOaLankResultat:
+    """Slår upp en öppet tillgänglig fulltextlänk för en DOI.
+
+    Frågar OpenAlex och, om DISCOVERY_KONTAKT_EPOST är satt så att källan är
+    aktiv, Unpaywall — se discovery_kallor för vilka som faktiskt frågades.
+
+    Returnerar varje tillfrågad källas egna svar under "kallor", plus ett
+    sammanfattande "oa_lank" (första källan i tur och ordning som hade en
+    länk). Ingen aktiv källa hade en länk ger "oa_lank": null, inte ett fel
+    — det är ett giltigt svar (verket kan helt enkelt sakna öppen kopia).
+    """
+    try:
+        return providers.oa_lank(doi)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool(title="Visa citeringsgrafen för en post", annotations=LASNING_EXTERN)
+def discovery_citeringar(id: str, riktning: str = "citerande", limit: int = 20) -> DiscoveryCiteringarResultat:
+    """Visar vilka verk som citerar en post, eller vilka den citerar.
+
+    id       - OpenAlex-id, Semantic Scholar-id eller DOI för posten.
+    riktning - "citerande" (verk som citerar posten) eller "referenser"
+               (verk posten citerar).
+    limit    - max antal träffar per källa (1-200, standard 20).
+
+    Frågar OpenAlex och, om aktiv, Semantic Scholar — se discovery_kallor.
+    Returnerar varje källas egna träffar under "kallor"; källorna har olika
+    täckning och dedupliceras inte mot varandra här.
+    """
+    try:
+        return providers.citeringar(id, riktning=riktning, limit=limit)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
 
 
 if __name__ == "__main__":
