@@ -39,6 +39,7 @@ import datacite_client
 import diva_client
 import kallkonfig
 import openalex_client
+import publicera_client
 import semanticscholar_client
 import swepub_client
 import unpaywall_client
@@ -149,6 +150,18 @@ def _diva_hamta(id_: str) -> dict:
     return diva_client.hamta(id_)
 
 
+def _publicera_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    """Publicera stödjer inte oppen_tillgang/land/kalla_filter i den här
+    klienten — sökningen är redan en begränsad OpenAlex-fråga."""
+    return publicera_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
+def _publicera_hamta(id_: str) -> dict:
+    """discovery_hamta("publicera", id) förväntar sig en DOI — se
+    publicera_client.hamta()."""
+    return publicera_client.hamta(id_)
+
+
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return openalex_client.sok(
         q,
@@ -235,6 +248,20 @@ PROVIDERS: dict[str, dict] = {
         "aktiv": kallkonfig.aktiv("diva"),
         "krav_saknas": None,
         "filterstod": ["oppen_tillgang"],
+    },
+    "publicera": {
+        "etikett": "Publicera (KB)",
+        "beskrivning": (
+            "Svenska vetenskapliga tidskrifter på KB:s OJS-plattform. Sök via "
+            "OpenAlex begränsat till 46 av 55 identifierade tidskrifts-ISSN; "
+            "hamta() går äkta mot källan via OAI-PMH."
+        ),
+        "sok": _publicera_sok,
+        "hamta": _publicera_hamta,
+        "fel": publicera_client.PubliceraFel,
+        "aktiv": kallkonfig.aktiv("publicera"),
+        "krav_saknas": None,
+        "filterstod": [],
     },
 }
 
