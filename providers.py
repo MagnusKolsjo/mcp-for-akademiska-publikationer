@@ -46,6 +46,7 @@ import publicera_client
 import semanticscholar_client
 import swepub_client
 import unpaywall_client
+import zbmath_client
 from kallhjalp import DiscoveryKallaFel
 
 # En källas anrop i discovery_sok får högst så här lång tid, oavsett dess
@@ -180,6 +181,10 @@ def _europepmc_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filte
     return europepmc_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
 
 
+def _zbmath_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    return zbmath_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return openalex_client.sok(
         q,
@@ -308,6 +313,16 @@ PROVIDERS: dict[str, dict] = {
         "hamta": lambda id_: europepmc_client.hamta(id_),
         "fel": europepmc_client.EuropePmcFel,
         "aktiv": kallkonfig.aktiv("europepmc"),
+        "krav_saknas": None,
+        "filterstod": [],
+    },
+    "zbmath": {
+        "etikett": "zbMATH Open",
+        "beskrivning": "Matematisk bibliografidatabas med MSC-klassificering.",
+        "sok": _zbmath_sok,
+        "hamta": lambda id_: zbmath_client.hamta(id_),
+        "fel": zbmath_client.ZbmathFel,
+        "aktiv": kallkonfig.aktiv("zbmath"),
         "krav_saknas": None,
         "filterstod": [],
     },
