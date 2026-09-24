@@ -1,0 +1,332 @@
+[
+  {
+    "spec": "al",
+    "namn": "Acta Logopaedica",
+    "issn": "2004-9048",
+    "eissn": null
+  },
+  {
+    "spec": "adoranten",
+    "namn": "Adoranten",
+    "issn": "0349-8808",
+    "eissn": "3035-9880"
+  },
+  {
+    "spec": "aejpr",
+    "namn": "AGATHEOS – European Journal for Philosophy of Religion",
+    "issn": null,
+    "eissn": null
+  },
+  {
+    "spec": "aoh",
+    "namn": "Arbete och Hälsa",
+    "issn": "0346-7821",
+    "eissn": "3035-9821"
+  },
+  {
+    "spec": "arv",
+    "namn": "Arv",
+    "issn": "0066-8176",
+    "eissn": "2002-4185"
+  },
+  {
+    "spec": "asla",
+    "namn": "ASLA:s skriftserie",
+    "issn": null,
+    "eissn": null
+  },
+  {
+    "spec": "cia",
+    "namn": "Childhood in the Anthropocene",
+    "issn": "2004-9811",
+    "eissn": null
+  },
+  {
+    "spec": "ciwil",
+    "namn": "Current Issues in Work-Integrated Learning",
+    "issn": "3035-6903",
+    "eissn": null
+  },
+  {
+    "spec": "csa",
+    "namn": "Current Swedish Archaeology",
+    "issn": "1102-7355",
+    "eissn": "2002-3901"
+  },
+  {
+    "spec": "educare",
+    "namn": "Educare",
+    "issn": null,
+    "eissn": null
+  },
+  {
+    "spec": "ethsc",
+    "namn": "Ethnologia Scandinavica",
+    "issn": "0348-9698",
+    "eissn": "2003-6043"
+  },
+  {
+    "spec": "ejels",
+    "namn": "European Journal of Empirical Legal Studies",
+    "issn": "2004-8556",
+    "eissn": null
+  },
+  {
+    "spec": "ejpae",
+    "namn": "European Journal of Philosophy in Arts Education",
+    "issn": null,
+    "eissn": null
+  },
+  {
+    "spec": "forskul",
+    "namn": "Forskning om undervisning och lärande",
+    "issn": "2000-9674",
+    "eissn": "2001-6131"
+  },
+  {
+    "spec": "fornvannen",
+    "namn": "Fornvännen",
+    "issn": "0015-7813",
+    "eissn": "1404-9430"
+  },
+  {
+    "spec": "fn",
+    "namn": "Forum navale",
+    "issn": "0280-6215",
+    "eissn": "2002-0015"
+  },
+  {
+    "spec": "hyb",
+    "namn": "HYBRID – mellan akademi, kyrka & samhälle",
+    "issn": "2004-5417",
+    "eissn": "2004-5425"
+  },
+  {
+    "spec": "hpdebatt",
+    "namn": "Högskolepedagogisk debatt",
+    "issn": "2000-9216",
+    "eissn": "2004-3929"
+  },
+  {
+    "spec": "ihs",
+    "namn": "Idrott, historia och samhälle",
+    "issn": "0280-2775",
+    "eissn": "2004-7843"
+  },
+  {
+    "spec": "ir",
+    "namn": "Information Research",
+    "issn": "1368-1613",
+    "eissn": null
+  },
+  {
+    "spec": "insi",
+    "namn": "In Situ Archaeologica",
+    "issn": "2000-4044",
+    "eissn": "2002-7656"
+  },
+  {
+    "spec": "jdsr",
+    "namn": "Journal of Digital Social Research",
+    "issn": "2003-1998",
+    "eissn": null
+  },
+  {
+    "spec": "jevtm",
+    "namn": "Journal of Endovascular Resuscitation and Trauma Management",
+    "issn": "2002-7567",
+    "eissn": "2003-539X"
+  },
+  {
+    "spec": "jonas",
+    "namn": "Journal of Nordic Archaeological Science – JONAS",
+    "issn": "1650-1519",
+    "eissn": "2002-4223"
+  },
+  {
+    "spec": "jphe",
+    "namn": "Journal of Praxis in Higher Education",
+    "issn": "2003-3605",
+    "eissn": null
+  },
+  {
+    "spec": "kapet",
+    "namn": "Kapet",
+    "issn": "1653-4743",
+    "eissn": "2002-3979"
+  },
+  {
+    "spec": "kp",
+    "namn": "Kulturella Perspektiv – Svensk etnologisk tidskrift",
+    "issn": "1102-7908",
+    "eissn": "2004-0288"
+  },
+  {
+    "spec": "lambdanordica",
+    "namn": "lambda nordica",
+    "issn": "1100-2573",
+    "eissn": "2001-7286"
+  },
+  {
+    "spec": "meta",
+    "namn": "META – Historiskarkeologisk tidskrift",
+    "issn": "2002-0406",
+    "eissn": "2002-388X"
+  },
+  {
+    "spec": "mosp",
+    "namn": "Moderna Språk",
+    "issn": "2000-3560",
+    "eissn": null
+  },
+  {
+    "spec": "nob",
+    "namn": "Namn och bygd",
+    "issn": "0077-2704",
+    "eissn": "2002-4177"
+  },
+  {
+    "spec": "njes",
+    "namn": "Nordic Journal of English Studies",
+    "issn": "1502-7694",
+    "eissn": "1654-6970"
+  },
+  {
+    "spec": "noad",
+    "namn": "Nordisk Tidskrift för Allmän Didaktik",
+    "issn": "2002-1534",
+    "eissn": "2002-2832"
+  },
+  {
+    "spec": "noso",
+    "namn": "Nordisk tidskrift för socioonomastik",
+    "issn": null,
+    "eissn": null
+  },
+  {
+    "spec": "opuscula",
+    "namn": "Opuscula. Annual of the Swedish Institutes at Athens and Rome",
+    "issn": "2000-0898",
+    "eissn": "2004-7142"
+  },
+  {
+    "spec": "pfs",
+    "namn": "Pedagogisk forskning i Sverige",
+    "issn": "1401-6788",
+    "eissn": "2001-3345"
+  },
+  {
+    "spec": "puls",
+    "namn": "Puls – musik- och dansetnologisk tidskrift",
+    "issn": "2002-2972",
+    "eissn": null
+  },
+  {
+    "spec": "rig",
+    "namn": "Rig. Kulturhistorisk tidskrift",
+    "issn": null,
+    "eissn": null
+  },
+  {
+    "spec": "samlaren",
+    "namn": "Samlaren",
+    "issn": "0348-6133",
+    "eissn": "2002-3871"
+  },
+  {
+    "spec": "sjpa",
+    "namn": "Scandinavian Journal of Public Administration",
+    "issn": "2001-7405",
+    "eissn": "2001-7413"
+  },
+  {
+    "spec": "scis",
+    "namn": "Scripta Islandica",
+    "issn": null,
+    "eissn": null
+  },
+  {
+    "spec": "shs",
+    "namn": "Släkthistoriska Studier",
+    "issn": "2004-3910",
+    "eissn": null
+  },
+  {
+    "spec": "slr",
+    "namn": "Snow Leopard Reports",
+    "issn": "2004-5255",
+    "eissn": null
+  },
+  {
+    "spec": "smt",
+    "namn": "Socialmedicinsk tidskrift",
+    "issn": "0037-833X",
+    "eissn": "2000-4192"
+  },
+  {
+    "spec": "socvet",
+    "namn": "Socialvetenskaplig tidskrift",
+    "issn": "1104-1420",
+    "eissn": "2003-5624"
+  },
+  {
+    "spec": "sos",
+    "namn": "Språk och stil",
+    "issn": "1101-1165",
+    "eissn": "2002-4010"
+  },
+  {
+    "spec": "siplr",
+    "namn": "Stockholm Intellectual Property Law Review",
+    "issn": "2003-2382",
+    "eissn": "2003-2390"
+  },
+  {
+    "spec": "sea",
+    "namn": "Svensk Exegetisk Årsbok",
+    "issn": "1100-2298",
+    "eissn": "2001-9424"
+  },
+  {
+    "spec": "stm-sjm",
+    "namn": "Svensk tidskrift för musikforskning / Swedish Journal of Music Research",
+    "issn": "0081-9816",
+    "eissn": "1653-9672"
+  },
+  {
+    "spec": "svlm",
+    "namn": "Svenska landsmål och svenskt folkliv",
+    "issn": "0347-1837",
+    "eissn": "2004-9242"
+  },
+  {
+    "spec": "soh",
+    "namn": "Sömn och Hälsa",
+    "issn": "2003-234X",
+    "eissn": "2003-2501"
+  },
+  {
+    "spec": "tgv",
+    "namn": "Tidskrift för genusvetenskap",
+    "issn": "1654-5443",
+    "eissn": "2001-1377"
+  },
+  {
+    "spec": "tfl",
+    "namn": "Tidskrift för litteraturvetenskap",
+    "issn": null,
+    "eissn": null
+  },
+  {
+    "spec": "ul",
+    "namn": "Utbildning & Lärande",
+    "issn": "2001-4554",
+    "eissn": null
+  },
+  {
+    "spec": "ps",
+    "namn": "Publicera Support",
+    "issn": null,
+    "eissn": null
+  }
+]
