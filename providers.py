@@ -37,6 +37,7 @@ import arxiv_client
 import crossref_client
 import datacite_client
 import diva_client
+import europepmc_client
 import kallkonfig
 import nva_client
 import openalex_client
@@ -175,6 +176,10 @@ def _osf_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return osf_client.sok(q, limit=limit, leverantor=leverantor)
 
 
+def _europepmc_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    return europepmc_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return openalex_client.sok(
         q,
@@ -295,6 +300,16 @@ PROVIDERS: dict[str, dict] = {
         "aktiv": kallkonfig.aktiv("osf"),
         "krav_saknas": None,
         "filterstod": ["leverantor"],
+    },
+    "europepmc": {
+        "etikett": "Europe PMC",
+        "beskrivning": "Biomedicin och life science (PubMed/MEDLINE, PMC, preprints, patent m.m.).",
+        "sok": _europepmc_sok,
+        "hamta": lambda id_: europepmc_client.hamta(id_),
+        "fel": europepmc_client.EuropePmcFel,
+        "aktiv": kallkonfig.aktiv("europepmc"),
+        "krav_saknas": None,
+        "filterstod": [],
     },
 }
 
