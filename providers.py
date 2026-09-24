@@ -38,6 +38,7 @@ import crossref_client
 import datacite_client
 import diva_client
 import kallkonfig
+import nva_client
 import openalex_client
 import publicera_client
 import semanticscholar_client
@@ -162,6 +163,10 @@ def _publicera_hamta(id_: str) -> dict:
     return publicera_client.hamta(id_)
 
 
+def _nva_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    return nva_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return openalex_client.sok(
         q,
@@ -260,6 +265,16 @@ PROVIDERS: dict[str, dict] = {
         "hamta": _publicera_hamta,
         "fel": publicera_client.PubliceraFel,
         "aktiv": kallkonfig.aktiv("publicera"),
+        "krav_saknas": None,
+        "filterstod": [],
+    },
+    "nva": {
+        "etikett": "NVA",
+        "beskrivning": "Norges nationella forskningsarkiv (publikationer från norska lärosäten).",
+        "sok": _nva_sok,
+        "hamta": lambda id_: nva_client.hamta(id_),
+        "fel": nva_client.NvaFel,
+        "aktiv": kallkonfig.aktiv("nva"),
         "krav_saknas": None,
         "filterstod": [],
     },
