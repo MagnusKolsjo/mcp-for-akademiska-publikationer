@@ -64,6 +64,21 @@ _PER_KALLA_TIDSGRANS_S = 15.0
 # Enhetligt träffschema
 # ---------------------------------------------------------------------------
 
+def _som_ar(varde) -> int | None:
+    """Tvingar ett källfält till int|None. Källor levererar utgivningsår
+    omväxlande som int och sträng (t.ex. zbMATH Open) — sorteringen i
+    sok_alla kraschar hela anropet på en oväntad typ om det inte städas här,
+    en gång, i stället för i varje enskild klientmodul."""
+    if varde is None:
+        return None
+    if isinstance(varde, bool):
+        return None
+    if isinstance(varde, int):
+        return varde
+    text = str(varde).strip()
+    return int(text) if text.isdigit() else None
+
+
 def _till_enhetligt(traff: dict) -> dict:
     """Formar en källas egen trafform till discoveryhubbens gemensamma schema.
 
@@ -78,7 +93,7 @@ def _till_enhetligt(traff: dict) -> dict:
         "doi": traff.get("doi"),
         "titel": traff.get("titel"),
         "forfattare": traff.get("forfattare") or [],
-        "ar": traff.get("ar"),
+        "ar": _som_ar(traff.get("ar")),
         "typ": traff.get("typ"),
         "url": traff.get("url"),
         "oa_lank": traff.get("oa_lank") or traff.get("url_pdf"),

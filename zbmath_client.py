@@ -63,6 +63,9 @@ def _forma(post: dict) -> dict:
         if isinstance(a, dict) and a.get("name")
     ]
     typ = (post.get("document_type") or {}).get("description")
+    # "year" kommer omväxlande som int och som sträng beroende på post.
+    ar_raw = post.get("year")
+    ar = int(ar_raw) if ar_raw is not None and str(ar_raw).strip().isdigit() else None
 
     return {
         "kalla": KALLA,
@@ -70,7 +73,7 @@ def _forma(post: dict) -> dict:
         "doi": _doi(post.get("links")),
         "titel": titel_obj.get("title"),
         "forfattare": forfattare,
-        "ar": post.get("year"),
+        "ar": ar,
         "typ": typ,
         "url": post.get("zbmath_url"),
         "oa_lank": None,
