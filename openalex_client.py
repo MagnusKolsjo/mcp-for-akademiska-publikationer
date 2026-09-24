@@ -55,12 +55,13 @@ def _hamta(path: str, params: dict) -> dict:
     """GET mot OpenAlex. Kastar OpenAlexFel vid problem."""
     _vanta()
     alla = dict(params)
-    if API_NYCKEL:
-        alla["api_key"] = API_NYCKEL
+    # Nyckeln skickas i headern, inte i adressen: en adress med nyckel hamnar
+    # annars i felmeddelanden, loggar och proxyloggar.
+    headers = {"Authorization": f"Bearer {API_NYCKEL}"} if API_NYCKEL else None
     if kallkonfig.KONTAKT_EPOST:
         alla.setdefault("mailto", kallkonfig.KONTAKT_EPOST)
     try:
-        svar = _session.get(f"{BASE_URL}{path}", params=alla, timeout=TIMEOUT)
+        svar = _session.get(f"{BASE_URL}{path}", params=alla, headers=headers, timeout=TIMEOUT)
     except requests.RequestException as exc:
         raise OpenAlexFel(f"Kunde inte nå OpenAlex ({BASE_URL}{path}): {exc}") from exc
 
