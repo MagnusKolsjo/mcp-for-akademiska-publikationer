@@ -37,6 +37,7 @@ import arxiv_client
 import crossref_client
 import datacite_client
 import diva_client
+import econbiz_client
 import europepmc_client
 import kallkonfig
 import nva_client
@@ -185,6 +186,10 @@ def _zbmath_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return zbmath_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
 
 
+def _econbiz_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    return econbiz_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return openalex_client.sok(
         q,
@@ -323,6 +328,16 @@ PROVIDERS: dict[str, dict] = {
         "hamta": lambda id_: zbmath_client.hamta(id_),
         "fel": zbmath_client.ZbmathFel,
         "aktiv": kallkonfig.aktiv("zbmath"),
+        "krav_saknas": None,
+        "filterstod": [],
+    },
+    "econbiz": {
+        "etikett": "EconBiz",
+        "beskrivning": "ZBW:s ekonomiska litteraturdatabas (working papers, grå litteratur).",
+        "sok": _econbiz_sok,
+        "hamta": lambda id_: econbiz_client.hamta(id_),
+        "fel": econbiz_client.EconBizFel,
+        "aktiv": kallkonfig.aktiv("econbiz"),
         "krav_saknas": None,
         "filterstod": [],
     },
