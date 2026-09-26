@@ -2,7 +2,7 @@
 
 DiVA aggregerar publikationer från ~50 svenska lärosäten och myndigheter.
 Modulen bygger på samma export.jsf-anrop, frågebygge (_bygg_params) och
-CSV-tolkning (_bygg_rubrikindex, DivaKallaFel) som stream-12-diva-portals
+CSV-tolkning (_bygg_rubrikindex, DivaKallaFel) som mcp-for-diva:s
 mcp_server.py, kopierat och förenklat till bara sökdelen — ingen databas,
 ingen PDF-hämtning eller textextraktion, och bara det kolumnurval discovery
 faktiskt normaliserar till sitt gemensamma träffschema.
@@ -13,7 +13,7 @@ rubrikerna) betyder att källan har ändrats — DivaKallaFel, aldrig tomma
 träffar som ser ut som ett riktigt sökresultat.
 
 API-referens: DiVA har inget publicerat REST-API; export.jsf är portalens
-egen CSV-export, verifierad mot faktiska svar (se stream-12-diva-portal).
+egen CSV-export, verifierad mot faktiska svar (se mcp-for-diva).
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ TIMEOUT = float(os.environ.get("DIVA_TIMEOUT", "30"))
 KALLA = "diva"
 
 # Internt fältnamn -> möjliga CSV-rubriker (gement). Bara det urval som
-# discoveryhubbens gemensamma schema behöver — se stream-12-diva-portal för
+# discoveryhubbens gemensamma schema behöver — se mcp-for-diva för
 # det fulla kolumnschemat (epistemisk status, handledare, examinator m.m.),
 # som inte tas med här.
 _KOLUMN_ALIAS: dict[str, list[str]] = {
@@ -169,7 +169,7 @@ def _bygg_params(
     oppen_tillgang: bool | None,
 ) -> dict:
     """DiVA-sökparametrar: fritext och årsintervall i en AND-grupp (samma
-    aq-struktur som stream-12-diva-portals _bygg_params)."""
+    aq-struktur som mcp-for-diva:s _bygg_params)."""
     and_villkor: list[dict] = [{"freeText": q}]
     if fran_ar and till_ar:
         and_villkor.append({"dateIssued": {"from": str(int(fran_ar)), "to": str(int(till_ar))}})

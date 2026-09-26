@@ -44,14 +44,15 @@ hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
 | [DOAJ](https://doaj.org) | Granskade open access-tidskrifter | Sökbar | — | CC0 |
 | [CORE](https://core.ac.uk) | Aggregerad fulltext/metadata | Sökbar, **avstängd som standard** | — (nyckel rekommenderas) | Icke-kommersiell fri nivå |
 
-Varje ny källa (allt utom Libris/Crossref/DataCite/arXiv) kan slås av eller
-på oberoende via `DISCOVERY_<KALLA>_AKTIV` i `.env`, utan kodändring. En
+Alla källor utom Libris, Crossref, DataCite och arXiv kan slås av eller
+på var för sig via `DISCOVERY_<KALLA>_AKTIV` i `.env`, utan kodändring.
+De fyra har egna verktyg och är alltid aktiva. En
 källa som kräver en nyckel eller kontakt-e-post som saknas inaktiveras
 automatiskt — kör `discovery_kallor()` för att se aktiv-status och skälet.
 CORE är av som standard; sätt `DISCOVERY_CORE_AKTIV=true` för att slå på.
 
-**Publicera-tidskrifternas ISSN:** `stream-11-publicera-kb/tidskrifter.json`
-har bara `spec`/`namn`, ingen ISSN. `publicera_tidskrifter.json` i det här
+**Publicera-tidskrifternas ISSN:** tidskriftslistan i [mcp-for-kb-publicera](https://github.com/MagnusKolsjo/mcp-for-kb-publicera)
+(`tidskrifter.json`) har bara `spec`/`namn`, ingen ISSN. `publicera_tidskrifter.json` i det här
 repot togs fram genom att slå upp varje tidskriftsnamn mot OpenAlex
 `/sources` och kräva en namnlikhet på minst 0,85 (`difflib.SequenceMatcher`)
 innan träffen accepterades — ett engångsuppslag, inte något som körs vid

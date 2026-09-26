@@ -2,15 +2,15 @@
 vetenskapliga tidskrifter (publicera.kb.se).
 
 Discovery har ingen egen databas, till skillnad från
-stream-11-publicera-kb (som synkar metadata till Postgres/SQLite). sok()
+MCP-servern mcp-for-kb-publicera (som synkar metadata till Postgres/SQLite). sok()
 löser det genom att söka OpenAlex, begränsat till de ISSN som identifierats
 för Publicera-tidskrifterna — se publicera_tidskrifter.json, som togs fram
-genom att slå upp varje tidskriftsnamn i stream-11-publicera-kb/
+genom att slå upp varje tidskriftsnamn i mcp-for-kb-publicera:s
 tidskrifter.json (som saknar ISSN) mot OpenAlex /sources, med ett
 likhetstest mot tidskriftsnamnet innan träffen accepterades. 46 av 55
 tidskrifter fick en ISSN den vägen (se CHANGELOG); resten täcks inte av
 sok() förrän de kompletteras manuellt eller via en annan metod (Publiceras
-egen OAI-PMH per tidskrift, se stream-11).
+egen OAI-PMH per tidskrift, som mcp-for-kb-publicera använder).
 
 hamta() går däremot äkta mot Publicera: en DOI följs (redirect) till sin
 OJS-landningssida (https://publicera.kb.se/<spec>/article/view/<id>), vars
@@ -49,7 +49,7 @@ NS_DC = "http://purl.org/dc/elements/1.1/"
 NS_OAI_DC = "http://www.openarchives.org/OAI/2.0/oai_dc/"
 
 # Markörer som bara finns på Anubis egna sidor (inbäddade JSON-block och
-# sökvägen till dess statiska filer) — samma mönster som stream-11.
+# sökvägen till dess statiska filer) — samma mönster som mcp-for-kb-publicera.
 _ANUBIS_MARKORER = (b"anubis_challenge", b"anubis_version", b"/.within.website/")
 
 

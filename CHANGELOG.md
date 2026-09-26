@@ -38,16 +38,16 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   `kallhjalp.py` (taktbegränsare, gemensam felbasklass).
 
 - Elva ytterligare källor: SwePub (Libris Xsearch), DiVA (export.jsf,
-  förenklad från stream-12-diva-portal), Publicera/KB (sökning via en
+  förenklad från mcp-for-diva), Publicera/KB (sökning via en
   OpenAlex-fråga begränsad till 46 av 55 identifierade tidskrifts-ISSN,
   hämtning äkta via OAI-PMH GetRecord med samma Anubis-igenkänning som
-  stream-11-publicera-kb), NVA (Norge), OSF Preprints (titelsökning, en
+  mcp-for-kb-publicera), NVA (Norge), OSF Preprints (titelsökning, en
   leverantör per anrop), Europe PMC, zbMATH Open, EconBiz, HAL, DOAJ och
   CORE (avstängd som standard, `DISCOVERY_CORE_AKTIV=true` slår på den).
   Samtliga deltar i `discovery_sok`/`discovery_hamta` via samma register
   i `providers.py`.
 - `publicera_tidskrifter.json`: ISSN/eISSN för Publicera-tidskrifterna,
-  eftersom `stream-11-publicera-kb/tidskrifter.json` saknar ISSN helt.
+  eftersom `tidskrifter.json` i mcp-for-kb-publicera saknar ISSN helt.
   Togs fram genom ett engångsuppslag av varje tidskriftsnamn mot OpenAlex
   `/sources` (namnlikhet ≥ 0,85 krävdes för att acceptera en träff);
   46 av 55 tidskrifter fick en ISSN.
