@@ -1,2 +1,23 @@
-.env
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Konfiguration
+.env
+
+# Loggar
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
