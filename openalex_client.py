@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för OpenAlex REST-API:et.
 
 OpenAlex är ett öppet index över vetenskapliga verk med brett ämnestäckning

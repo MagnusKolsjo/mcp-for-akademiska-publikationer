@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för NVA (Nasjonalt vitenarkiv), Norges nationella forskningsarkiv.
 
 NVA aggregerar publikationer från norska lärosäten och institutioner.

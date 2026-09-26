@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för Crossref REST-API:et.
 
 Crossref är registreringsbyrån för DOI:er på vetenskapliga artiklar, böcker,

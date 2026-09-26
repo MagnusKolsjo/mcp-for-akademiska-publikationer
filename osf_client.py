@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för OSF Preprints (Open Science Framework).
 
 OSF Preprints samlar ett stort antal ämnesspecifika preprint-servrar under

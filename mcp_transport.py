@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Uppstart och transportval för MCP-servern: stdio eller http.
 
 stdio och http är symmetriska val. stdio passar en lokal MCP-klient, där

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Verktygsannotationer och cachningshintar för MCP-servern.
 
 MCP:s fyra hintar (readOnlyHint, destructiveHint, idempotentHint,

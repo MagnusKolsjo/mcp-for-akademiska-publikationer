@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Av/på-läge, nycklar och kontaktuppgift för de nya discovery-källorna.
 
 Varje ny källa kan slås av eller på oberoende i .env, utan kodändring:

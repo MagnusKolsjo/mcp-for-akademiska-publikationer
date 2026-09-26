@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för zbMATH Open REST-API:et.
 
 zbMATH Open är den matematiska bibliografidatabasen (efterföljaren till

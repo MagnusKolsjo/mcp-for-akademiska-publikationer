@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för Unpaywall REST-API:et.
 
 Unpaywall svarar bara på en fråga: var finns en öppet tillgänglig kopia av

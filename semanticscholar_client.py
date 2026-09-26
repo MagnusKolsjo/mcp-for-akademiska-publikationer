@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för Semantic Scholars Graph API.
 
 Semantic Scholar används här som berikningskälla för discovery_citeringar

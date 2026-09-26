@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för CORE REST-API:et (v3).
 
 CORE aggregerar fulltext och metadata från open access-arkiv och

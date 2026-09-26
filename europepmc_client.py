@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för Europe PMC REST-API:et.
 
 Europe PMC indexerar biomedicinsk och life science-litteratur (PubMed/

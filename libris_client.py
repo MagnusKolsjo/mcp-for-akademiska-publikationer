@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för Libris XL-API:et.
 
 Modulen kapslar in HTTP-anropen mot Libris sök- och läs-API samt mot

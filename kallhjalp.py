@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Gemensamma byggblock för de nya discovery-källornas HTTP-anrop och takt.
 
 Varje källa har sin egen klientmodul (t.ex. openalex_client.py), men alla

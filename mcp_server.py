@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """MCP-server för discovery — sök publikationer och deras metadata.
 
 Hubben samlar flera live sök-API:er för publikationer och forskningsutfall bakom

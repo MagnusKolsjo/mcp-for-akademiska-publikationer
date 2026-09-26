@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Magnus Kolsjö
 """Klientmodul för arXivs Atom-API.
 
 arXiv är preprint-arkivet för fysik, matematik, datavetenskap, biologi m.fl.

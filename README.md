@@ -156,4 +156,6 @@ Servern stödjer två transporter, valda via `MCP_TRANSPORT`:
 
 ## Licens
 
-AGPL-3.0.
+AGPL-3.0-or-later.
+
+Servern lagrar ingenting från källorna. Posterna omfattas av respektive källas villkor; se kolumnen Attribution/villkor under Datakällor.

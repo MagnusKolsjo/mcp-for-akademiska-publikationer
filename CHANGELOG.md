@@ -6,6 +6,7 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
 ## [Unreleased]
 
 ### Tillagt
+- Licens: AGPL-3.0-or-later, med SPDX-huvud i varje Python-fil.
 - arXiv som ny källa: `arxiv_client.py`, verktygen `arxiv_sok` och
   `arxiv_hamta`, och en rad i `providers.py` så att arXiv deltar i
   `discovery_sok`/`discovery_kallor` tillsammans med Crossref och DataCite.
