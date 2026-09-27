@@ -9,6 +9,11 @@ env/
 # Konfiguration
 .env
 
+# Svarscache i SQLite (DATABASE_URL=sqlite:///…)
+*.db
+*.db-wal
+*.db-shm
+
 # Loggar
 logs/
 *.log

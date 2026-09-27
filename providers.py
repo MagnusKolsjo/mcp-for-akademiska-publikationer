@@ -53,6 +53,7 @@ import openalex_client
 import osf_client
 import publicera_client
 import semanticscholar_client
+import svarscache
 import swepub_client
 import unpaywall_client
 import zbmath_client
@@ -566,7 +567,7 @@ def lista_kallor() -> dict:
             rad["inaktiverad_orsak"] = p["krav_saknas"]
         berikning.append(rad)
 
-    return {"kallor": sokbara, "berikningskallor": berikning}
+    return {"kallor": sokbara, "berikningskallor": berikning, "svarscache": svarscache.status()}
 
 
 def _aktiva_providers() -> dict[str, dict]:
@@ -614,13 +615,19 @@ def sok_alla(
         kalla_filter = (filter or {}).get(namn)
         t0 = time.monotonic()
         try:
-            svar = provider["sok"](q, limit_per_kalla, fran_ar, till_ar, oppen_tillgang, land, kalla_filter)
+            svar, fran_cache = svarscache.hamta_eller_kor(
+                namn, svarscache.SOK,
+                {"q": q, "limit": limit_per_kalla, "fran_ar": fran_ar, "till_ar": till_ar,
+                 "oppen_tillgang": oppen_tillgang, "land": land, "filter": kalla_filter},
+                lambda: provider["sok"](q, limit_per_kalla, fran_ar, till_ar, oppen_tillgang, land, kalla_filter),
+            )
             traffar = [_till_enhetligt(t) for t in svar.get("traffar", [])]
             return namn, {
                 "traffar": traffar,
                 "totalt": svar.get("totalt"),
                 "antal": svar.get("antal", len(traffar)),
                 "tid_s": round(time.monotonic() - t0, 2),
+                "fran_cache": fran_cache,
             }, None
         except provider["fel"] as exc:
             return namn, None, str(exc)
@@ -655,6 +662,7 @@ def sok_alla(
             "totalt": resultat["totalt"],
             "antal": resultat["antal"],
             "tid_s": resultat["tid_s"],
+            "fran_cache": resultat["fran_cache"],
         }
 
     # Ordning i valda-listan, inte i färdigordning — annars styr svarstiden
@@ -724,7 +732,8 @@ def hamta_fran_kalla(kalla: str, id_: str) -> dict:
     provider = aktiva[kalla]
     if "hamta" not in provider or provider["hamta"] is None:
         raise ValueError(f"Källan '{kalla}' stödjer inte hämtning av en enskild post ännu.")
-    return _till_enhetligt(provider["hamta"](id_))
+    svar, _ = svarscache.hamta_eller_kor(kalla, svarscache.POST, {"id": id_}, lambda: provider["hamta"](id_))
+    return _till_enhetligt(svar)
 
 
 def oa_lank(doi: str) -> dict:
@@ -734,14 +743,18 @@ def oa_lank(doi: str) -> dict:
 
     if PROVIDERS["openalex"]["aktiv"]:
         try:
-            post = openalex_client.hamta(doi)
+            post, _ = svarscache.hamta_eller_kor(
+                "openalex", svarscache.POST, {"id": doi}, lambda: openalex_client.hamta(doi)
+            )
             resultat["kallor"]["openalex"] = {"oa_lank": post.get("oa_lank")}
         except openalex_client.OpenAlexFel as exc:
             resultat["kallor"]["openalex"] = {"fel": str(exc)}
 
     if BERIKNING["unpaywall"]["aktiv"]:
         try:
-            post = unpaywall_client.hamta(doi)
+            post, _ = svarscache.hamta_eller_kor(
+                "unpaywall", svarscache.POST, {"doi": doi}, lambda: unpaywall_client.hamta(doi)
+            )
             resultat["kallor"]["unpaywall"] = {
                 "oa_lank": post.get("oa_lank"),
                 "is_oa": post.get("is_oa"),
@@ -765,7 +778,11 @@ def citeringar(id_eller_doi: str, *, riktning: str = "citerande", limit: int = 2
 
     if PROVIDERS["openalex"]["aktiv"]:
         try:
-            svar = openalex_client.citeringar(id_eller_doi, riktning=riktning, limit=limit)
+            svar, _ = svarscache.hamta_eller_kor(
+                "openalex", svarscache.SOK,
+                {"citeringar": id_eller_doi, "riktning": riktning, "limit": limit},
+                lambda: openalex_client.citeringar(id_eller_doi, riktning=riktning, limit=limit),
+            )
             resultat["kallor"]["openalex"] = {
                 "totalt": svar.get("totalt"),
                 "antal": svar.get("antal"),

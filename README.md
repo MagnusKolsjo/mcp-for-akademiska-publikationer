@@ -8,8 +8,10 @@ flera källor i ett anrop.
 ## Funktion
 
 Servern är en tunn wrapper mot externa sök-API:er. Varje verktygsanrop går
-direkt mot källans API — det finns ingen lokal databas och ingen synk, eftersom
-källorna redan är färdigindexerade sök-API:er.
+mot källans API — det finns ingen synk och ingen lokal kopia av källorna,
+eftersom de redan är färdigindexerade sök-API:er. En frivillig svarscache
+(se nedan) sparar källornas svar en kort tid, så att upprepade anrop inte
+kostar nya API-anrop.
 
 Varje källa är en självständig klientmodul. DOI-källorna (Crossref och DataCite)
 normaliserar sina träffar till en gemensam form; arXiv har ett eget, rikare
@@ -31,7 +33,7 @@ hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
 | [arXiv](https://info.arxiv.org/help/api/user-manual.html) | Preprints: fysik, matematik, data, biologi m.fl. | Sökbar, eget frågespråk | — | Max 1 anrop/3 s ([villkor](https://info.arxiv.org/help/api/tou.html)); *"Thank you to arXiv for use of its open access interoperability."* |
 | [OpenAlex](https://docs.openalex.org/) | Brett index, samtliga ämnesfält | Sökbar | — | CC0. Kostnadsbaserat sedan feb 2026 — se `kostnad_usd` i svaret; `DISCOVERY_OPENALEX_API_NYCKEL` höjer det dagliga taket |
 | [Unpaywall](https://unpaywall.org/products/api) | Open access-status för en DOI | Berikning (`discovery_oa_lank`) | `DISCOVERY_KONTAKT_EPOST` | Ingen sökning (`/v2/search` är trasig hos källan och används inte) |
-| [Semantic Scholar](https://api.semanticscholar.org/api-docs/graph) | Citeringsgraf | Berikning (`discovery_citeringar`) | — (nyckel rekommenderas) | Attribution krävs, ingen vidaredistribution i bulk — uppfylls redan av en databasfri server |
+| [Semantic Scholar](https://api.semanticscholar.org/api-docs/graph) | Citeringsgraf | Berikning (`discovery_citeringar`) | — (nyckel rekommenderas) | Attribution krävs, ingen vidaredistribution i bulk — svaren cachas därför aldrig |
 | [SwePub](https://www.kb.se) (Libris Xsearch) | Svenska lärosäten/myndigheter | Sökbar (ingen `hamta`) | — | — |
 | [DiVA](https://www.diva-portal.org) | ~50 svenska lärosäten/myndigheter | Sökbar | — | Egen `DIVA_USER_AGENT` (källans WAF blockerar UA-strängar som börjar med "Discovery") |
 | [Publicera](https://publicera.kb.se) (KB) | Svenska OJS-tidskrifter | Sökbar (via OpenAlex, 46/55 tidskrifter) | — | Botskyddet Anubis — identifierbar UA krävs, aldrig webbläsarlik |
@@ -60,6 +62,26 @@ innan träffen accepterades — ett engångsuppslag, inte något som körs vid
 serverstart. 46 av 55 tidskrifter fick en ISSN; resten (bl.a. "Publicera
 Support", som inte är en riktig tidskrift) täcks inte av `publicera_sok`
 förrän de kompletteras manuellt.
+
+## Svarscache
+
+Med `DATABASE_URL` satt sparas källornas svar i en databas: sökningar i 6
+timmar och enskilda poster i 7 dagar (`DISCOVERY_CACHE_SOK_TIMMAR`,
+`DISCOVERY_CACHE_POST_DAGAR`). Det sparar pengar hos OpenAlex och kvot hos
+källor med hård takt (arXiv, OSF), och ger snabbare svar när samma fråga
+körs igen. PostgreSQL och SQLite är likvärdiga val:
+
+- **PostgreSQL** — `DATABASE_URL=postgresql://…`; tabellen hamnar i schemat
+  `discovery`, så databasen kan delas med andra MCP-servrar. Kräver
+  `psycopg2-binary`.
+- **SQLite** — `DATABASE_URL=sqlite:///discovery-cache.db`; en lokal fil i
+  servermappen, ingen serverprocess.
+
+Utan `DATABASE_URL`, eller med `DISCOVERY_CACHE_AKTIV=false`, frågas källorna
+direkt varje gång. Cachen är fail-open: svarar databasen inte fortsätter
+sökningen utan den. `discovery_kallor` visar cachens status, och
+`discovery_sok` redovisar `fran_cache` per källa. Fel från en källa cachas
+aldrig, och Semantic Scholar cachas aldrig (villkoren förbjuder lagring).
 
 ## Installation
 

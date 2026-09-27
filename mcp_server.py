@@ -4,8 +4,9 @@
 
 Hubben samlar flera live sök-API:er för publikationer och forskningsutfall bakom
 ett gemensamt MCP-gränssnitt. Varje källa är en självständig klientmodul; varje
-verktygsanrop går direkt mot källans API. Ingen lokal databas och ingen synk —
-källorna är redan färdigindexerade sök-API:er.
+verktygsanrop går mot källans API. Ingen synk och ingen lokal kopia av
+källorna — de är redan färdigindexerade sök-API:er — men en frivillig
+svarscache (svarscache.py) sparar svaren en kort tid.
 
 Källor och verktyg:
   Libris (KB:s nationella bibliotekskatalog)
@@ -63,6 +64,7 @@ import crossref_client
 import datacite_client
 import libris_client
 import providers
+import svarscache
 from arxiv_client import ArxivFel
 from crossref_client import CrossrefFel
 from datacite_client import DataCiteFel
@@ -87,6 +89,12 @@ mcp = MCPServer(
     version="0.1.0",
     cache_hints=CACHE_HINTAR,
 )
+
+
+def _cachad(kalla: str, operation: str, parametrar: dict, kor):
+    """Kör ett källanrop via svarscachen (se svarscache.py)."""
+    svar, _ = svarscache.hamta_eller_kor(kalla, operation, parametrar, kor)
+    return svar
 
 
 def kallverktyg(kalla: str, **kwargs):
@@ -151,6 +159,8 @@ class DiscoverySokResultat(TypedDict):
 
 class DiscoveryKallorResultat(TypedDict):
     kallor: list[dict[str, Any]]
+    berikningskallor: list[dict[str, Any]]
+    svarscache: dict[str, Any]
 
 
 class ArxivTraff(TypedDict):
@@ -244,12 +254,15 @@ def libris_sok(
         sammanslaget.setdefault("instanceOf.subject.@id", amne_id)
 
     try:
-        return libris_client.sok(
-            q=q or None,
-            limit=limit,
-            offset=offset,
-            sort=sort or None,
-            filter=sammanslaget or None,
+        return _cachad(
+            "libris", svarscache.SOK, {"q": q, "limit": limit, "offset": offset, "sort": sort, "filter": sammanslaget},
+            lambda: libris_client.sok(
+                q=q or None,
+                limit=limit,
+                offset=offset,
+                sort=sort or None,
+                filter=sammanslaget or None,
+            ),
         )
     except LibrisFel as exc:
         raise ToolError(str(exc)) from exc
@@ -270,8 +283,14 @@ def libris_hamta(libris_id: str, format: str = "kort") -> dict[str, Any]:
     """
     try:
         if format == "full":
-            return libris_client.hamta_post(libris_id)
-        return libris_client.sammanfatta_post(libris_id)
+            return _cachad(
+                "libris", svarscache.POST, {"id": libris_id, "format": "full"},
+                lambda: libris_client.hamta_post(libris_id),
+            )
+        return _cachad(
+            "libris", svarscache.POST, {"id": libris_id, "format": "kort"},
+            lambda: libris_client.sammanfatta_post(libris_id),
+        )
     except LibrisFel as exc:
         raise ToolError(str(exc)) from exc
 
@@ -287,7 +306,10 @@ def libris_bestand(libris_id: str, limit: int = 50) -> LibrisBestandResultat:
     och namn för varje innehavande bibliotek.
     """
     try:
-        return libris_client.bestand(libris_id, limit=limit)
+        return _cachad(
+            "libris", svarscache.POST, {"bestand": libris_id, "limit": limit},
+            lambda: libris_client.bestand(libris_id, limit=limit),
+        )
     except LibrisFel as exc:
         raise ToolError(str(exc)) from exc
 
@@ -309,7 +331,10 @@ def libris_sla_upp_term(q: str, typ: str = "", limit: int = 10) -> LibrisTermerR
     använda som filtervärde.
     """
     try:
-        return libris_client.sla_upp_term(q, typ=typ or None, limit=limit)
+        return _cachad(
+            "libris", svarscache.POST, {"term": q, "typ": typ, "limit": limit},
+            lambda: libris_client.sla_upp_term(q, typ=typ or None, limit=limit),
+        )
     except LibrisFel as exc:
         raise ToolError(str(exc)) from exc
 
@@ -354,18 +379,23 @@ def cr_sok(
     en doi som kan matas vidare till cr_hamta.
     """
     try:
-        return crossref_client.sok(
-            q=q or None,
-            limit=limit,
-            offset=offset,
-            sort=sort or None,
-            typ=typ or None,
-            fran_ar=fran_ar or None,
-            till_ar=till_ar or None,
-            forfattare=forfattare or None,
-            titel=titel or None,
-            tidskrift=tidskrift or None,
-            filter=filter or None,
+        return _cachad(
+            "crossref", svarscache.SOK,
+            dict(q=q, limit=limit, offset=offset, sort=sort, typ=typ, fran_ar=fran_ar, till_ar=till_ar,
+                 forfattare=forfattare, titel=titel, tidskrift=tidskrift, filter=filter),
+            lambda: crossref_client.sok(
+                q=q or None,
+                limit=limit,
+                offset=offset,
+                sort=sort or None,
+                typ=typ or None,
+                fran_ar=fran_ar or None,
+                till_ar=till_ar or None,
+                forfattare=forfattare or None,
+                titel=titel or None,
+                tidskrift=tidskrift or None,
+                filter=filter or None,
+            ),
         )
     except CrossrefFel as exc:
         raise ToolError(str(exc)) from exc
@@ -383,7 +413,10 @@ def cr_hamta(doi: str, format: str = "kort") -> dict[str, Any]:
     säger att verket inte hittades.
     """
     try:
-        return crossref_client.hamta(doi, format=format)
+        return _cachad(
+            "crossref", svarscache.POST, {"id": doi, "format": format},
+            lambda: crossref_client.hamta(doi, format=format),
+        )
     except CrossrefFel as exc:
         raise ToolError(str(exc)) from exc
 
@@ -426,17 +459,22 @@ def dc_sok(
     en doi som kan matas vidare till dc_hamta.
     """
     try:
-        return datacite_client.sok(
-            q=q or None,
-            limit=limit,
-            sida=sida,
-            sort=sort or None,
-            typ=typ or None,
-            fran_ar=fran_ar or None,
-            till_ar=till_ar or None,
-            utgivare=utgivare or None,
-            klient_id=klient_id or None,
-            filter=filter or None,
+        return _cachad(
+            "datacite", svarscache.SOK,
+            dict(q=q, limit=limit, sida=sida, sort=sort, typ=typ, fran_ar=fran_ar, till_ar=till_ar,
+                 utgivare=utgivare, klient_id=klient_id, filter=filter),
+            lambda: datacite_client.sok(
+                q=q or None,
+                limit=limit,
+                sida=sida,
+                sort=sort or None,
+                typ=typ or None,
+                fran_ar=fran_ar or None,
+                till_ar=till_ar or None,
+                utgivare=utgivare or None,
+                klient_id=klient_id or None,
+                filter=filter or None,
+            ),
         )
     except DataCiteFel as exc:
         raise ToolError(str(exc)) from exc
@@ -454,7 +492,10 @@ def dc_hamta(doi: str, format: str = "kort") -> dict[str, Any]:
     säger att posten inte hittades.
     """
     try:
-        return datacite_client.hamta(doi, format=format)
+        return _cachad(
+            "datacite", svarscache.POST, {"id": doi, "format": format},
+            lambda: datacite_client.hamta(doi, format=format),
+        )
     except DataCiteFel as exc:
         raise ToolError(str(exc)) from exc
 
@@ -502,15 +543,20 @@ def arxiv_sok(
     Thank you to arXiv for use of its open access interoperability.
     """
     try:
-        return arxiv_client.sok(
-            q=q or None,
-            limit=limit,
-            start=start,
-            sort_by=sort_by or None,
-            sort_order=sort_order or None,
-            kategori=kategori or None,
-            fran_ar=fran_ar or None,
-            till_ar=till_ar or None,
+        return _cachad(
+            "arxiv", svarscache.SOK,
+            dict(q=q, kategori=kategori, limit=limit, start=start, sort_by=sort_by,
+                 sort_order=sort_order, fran_ar=fran_ar, till_ar=till_ar),
+            lambda: arxiv_client.sok(
+                q=q or None,
+                limit=limit,
+                start=start,
+                sort_by=sort_by or None,
+                sort_order=sort_order or None,
+                kategori=kategori or None,
+                fran_ar=fran_ar or None,
+                till_ar=till_ar or None,
+            ),
         )
     except ArxivFel as exc:
         raise ToolError(str(exc)) from exc
@@ -530,7 +576,10 @@ def arxiv_hamta(arxiv_id: str, format: str = "kort") -> ArxivTraff:
     säger att posten inte hittades.
     """
     try:
-        return arxiv_client.hamta(arxiv_id, format=format)
+        return _cachad(
+            "arxiv", svarscache.POST, {"id": arxiv_id, "format": format},
+            lambda: arxiv_client.hamta(arxiv_id, format=format),
+        )
     except ArxivFel as exc:
         raise ToolError(str(exc)) from exc
 
@@ -625,7 +674,9 @@ def discovery_kallor() -> DiscoveryKallorResultat:
     discovery_oa_lank/discovery_citeringar, inte av discovery_sok.
 
     En källa som kräver en nyckel eller kontakt-e-post som saknas i .env
-    är "aktiv": false med en förklaring i "inaktiverad_orsak".
+    är "aktiv": false med en förklaring i "inaktiverad_orsak". Fältet
+    "svarscache" visar om svarscachen är aktiv, dess livstider och, om den
+    är avstängd, varför.
 
     Listan är inbyggd i servern (providers.py), inte hämtad över nätet.
     """

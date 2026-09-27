@@ -2,6 +2,9 @@ mcp>=2.0,<3
 python-dotenv>=1.0.0
 requests>=2.31.0
 
+# Behövs endast för svarscache i PostgreSQL (DATABASE_URL=postgresql://…)
+psycopg2-binary>=2.9
+
 # Behövs endast för HTTP-transport (MCP_TRANSPORT=http)
 starlette>=0.36.0
 uvicorn>=0.27.0

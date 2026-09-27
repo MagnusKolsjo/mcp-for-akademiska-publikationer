@@ -6,6 +6,15 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
 ## [Unreleased]
 
 ### Tillagt
+- Svarscache (`svarscache.py`, `db.py`): källornas svar sparas i
+  PostgreSQL eller SQLite, valt med `DATABASE_URL` — sökningar i 6 timmar,
+  enskilda poster i 7 dagar (`DISCOVERY_CACHE_SOK_TIMMAR`,
+  `DISCOVERY_CACHE_POST_DAGAR`). Gäller `discovery_sok`, `discovery_hamta`,
+  `discovery_oa_lank`, `discovery_citeringar` och käll-verktygen. Fail-open:
+  utan databas, med `DISCOVERY_CACHE_AKTIV=false` eller om databasen inte
+  svarar frågas källorna direkt. Fel cachas aldrig, Semantic Scholar
+  cachas aldrig. `discovery_kallor` visar cachens status och
+  `discovery_sok` redovisar `fran_cache` per källa.
 - Libris, Crossref, DataCite och arXiv kan slås av/på med
   `DISCOVERY_<KALLA>_AKTIV` precis som övriga källor. Avstängd källa
   ingår inte i `discovery_sok`, och dess egna verktyg (`libris_*`, `cr_*`,
