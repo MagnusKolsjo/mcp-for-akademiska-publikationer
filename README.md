@@ -63,6 +63,36 @@ serverstart. 46 av 55 tidskrifter fick en ISSN; resten (bl.a. "Publicera
 Support", som inte är en riktig tidskrift) täcks inte av `publicera_sok`
 förrän de kompletteras manuellt.
 
+## Källval i discovery_sok
+
+`discovery_sok` frågar inte alla källor. Den väljer en kärna utifrån
+frågan och breddar bara när kärnan ger för få träffar:
+
+- **Alltid:** de två breda indexen OpenAlex och Crossref.
+- **Språk:** en svensk fråga tar med Libris, SwePub, DiVA och Publicera, en
+  norsk NVA. Språket gissas ur frågan, men säkrast är att skicka frågan per
+  språk: `q={"sv": "ensamhet äldre", "en": "loneliness older adults"}` —
+  då får varje källa sitt språk.
+- **Ämne** (`amne`): arXiv, Europe PMC, zbMATH, EconBiz, OSF och HAL frågas
+  bara när ämnet passar dem. **Typ** (`typ`): DataCite vid `dataset` och
+  `programvara`. **Land** (`land="SE"`): landets källor.
+- **Breddning:** har färre än hälften av `limit` träffar frågans ord i
+  titel eller abstract frågas även DOAJ, CORE och de nordiska källorna.
+  Ämneskällor som inte passar frågan frågas aldrig automatiskt.
+- `strategi="bred"` frågar alla aktiva källor; en uttrycklig `kallor`-lista
+  går alltid före.
+
+Svaret redovisar vilka källor som frågades och varför (`fragade_kallor`),
+och vilka som inte frågades (`ej_fragade`). `limit` gäller hela svaret;
+resten av det sammanslagna resultatet hämtas med `fortsattning` utan nya
+anrop till källorna. Träffar med frågans ord i titel eller abstract
+rangordnas först, och kringmaterial som förlagen registrerar med egen DOI
+("Copyright", "Index", "Front Matter" …) sorteras bort.
+
+En källa som svarar 429 (för många anrop), eller missar tidsgränsen två
+gånger i rad, pausas i fem minuter (`DISCOVERY_PAUS_VID_OVERBELASTNING_S`).
+`discovery_kallor` visar varje källas profil och statistik sedan start.
+
 ## Svarscache
 
 Med `DATABASE_URL` satt sparas källornas svar i en databas: sökningar i 6

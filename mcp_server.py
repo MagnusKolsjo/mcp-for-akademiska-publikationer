@@ -81,8 +81,10 @@ mcp = MCPServer(
         "index (OpenAlex, Crossref, DataCite), preprints (arXiv, OSF), svenska "
         "och nordiska källor (Libris, SwePub, DiVA, Publicera, NVA) och "
         "ämneskällor (Europe PMC, zbMATH Open, EconBiz, HAL, DOAJ). "
-        "discovery_sok frågar alla aktiva källor parallellt, slår ihop "
-        "träffarna på DOI och rangordnar efter relevans; discovery_kallor "
+        "discovery_sok väljer källor efter frågans språk, ämne och typ "
+        "(breddar vid för få träffar), slår ihop träffarna på DOI och "
+        "rangordnar efter relevans. Skicka gärna q per språk, "
+        "{\"sv\": …, \"en\": …}, och amne/typ. discovery_kallor "
         "visar vilka källor som är aktiva och varför en källa kan vara "
         "avstängd. discovery_oa_lank hittar öppna kopior och "
         "discovery_citeringar citeringsgrafen. libris_sok/cr_sok/dc_sok/"
@@ -151,11 +153,17 @@ class KallSokResultat(TypedDict):
 
 
 class DiscoverySokResultat(TypedDict):
-    fraga: str
-    kallor: list[str]
+    fraga: str | dict[str, str]
+    strategi: str
+    breddad: bool
+    fragade_kallor: dict[str, str]
+    ej_fragade: dict[str, str]
     per_kalla: dict[str, dict[str, Any]]
     antal: int
+    antal_sammanslagna: int
+    fran_plats: int
     traffar: list[dict[str, Any]]
+    fortsattning: NotRequired[str]
     fel: NotRequired[dict[str, str]]
 
 
@@ -163,6 +171,8 @@ class DiscoveryKallorResultat(TypedDict):
     kallor: list[dict[str, Any]]
     berikningskallor: list[dict[str, Any]]
     svarscache: dict[str, Any]
+    amnen: dict[str, str]
+    typer: list[str]
 
 
 class ArxivTraff(TypedDict):
@@ -599,56 +609,78 @@ def arxiv_hamta(arxiv_id: str, format: str = "kort") -> ArxivTraff:
 
 @mcp.tool(title="Sök flera källor samtidigt", annotations=LASNING_EXTERN)
 def discovery_sok(
-    q: str,
+    q: str | dict[str, str] = "",
+    amne: str = "",
+    typ: str = "",
+    strategi: str = "auto",
     kallor: list[str] | None = None,
-    limit_per_kalla: int = 10,
+    limit: int = 20,
     fran_ar: int = 0,
     till_ar: int = 0,
     oppen_tillgang: bool | None = None,
     land: str = "",
-    filter: dict[str, dict] | None = None,
     sammanfattning_max: int = 300,
+    fortsattning: str = "",
+    limit_per_kalla: int = 10,
+    filter: dict[str, dict] | None = None,
 ) -> DiscoverySokResultat:
-    """Sök flera källor samtidigt och få sammanslagna, deduplicerade träffar.
+    """Sök vetenskapligt material i flera källor; sammanslaget och rangordnat.
 
-    Slår parallellt mot alla aktiva källor (eller en delmängd) och returnerar
-    en gemensam träfflista, deduplicerad på DOI. Bra som första bred sökning;
-    använd käll-verktygen (cr_sok, dc_sok, arxiv_sok) för käll-specifika filter
-    som inte täcks här.
+    Servern väljer källor efter frågan i stället för att fråga alla: två
+    breda index (OpenAlex, Crossref) plus de källor som passar frågans
+    språk, ämne, dokumenttyp och land. Ger det för få träffar breddas
+    sökningen till allmänna och nordiska källor; ämneskällor (arXiv,
+    Europe PMC, zbMATH, EconBiz, OSF, HAL) frågas bara när amne passar,
+    och DataCite när typ är dataset/programvara. Svaret visar
+    vilka källor som frågades och varför (fragade_kallor), och vilka som
+    inte frågades (ej_fragade).
 
     Parametrar:
-      q               - fritextfråga som skickas till varje vald källa.
-      kallor          - lista med källnamn, t.ex. ["crossref", "openalex"].
-                        Utelämnad = alla aktiva källor. Se discovery_kallor.
-      limit_per_kalla - max antal träffar per källa innan sammanslagning
-                        (standard 10).
-      fran_ar         - tidigaste utgivningsår (inklusive; för arXiv tolkas
-                        det som inskickningsår).
-      till_ar         - senaste utgivningsår (inklusive; se ovan).
-      oppen_tillgang  - True/False för att bara visa öppen/stängd tillgång.
-                        Stöds bara av vissa källor (se discovery_kallor);
-                        ignoreras av övriga.
-      land            - ISO-landskod för författarnas institutioner, t.ex.
-                        "SE". Stöds som ovan bara av vissa källor.
-      filter          - källspecifika råfilter: {"openalex": {"topics.id": "..."}}.
-      sammanfattning_max - max antal tecken abstract per träff (standard 300);
-                        0 utelämnar abstracten helt och ger kortast svar.
+      q        - fritextfråga, eller samma fråga per språk:
+                 {"sv": "ensamhet äldre", "en": "loneliness older adults"}.
+                 Svenska källor (Libris, SwePub, DiVA, Publicera) får då
+                 den svenska, NVA den norska och övriga den engelska.
+                 Ange gärna båda: mycket svensk forskning är på engelska.
+      amne     - styr källvalet: medicin, biologi, psykologi, matematik,
+                 statistik, fysik, datavetenskap, teknik, ekonomi,
+                 samhallsvetenskap, juridik, utbildning, humaniora, miljo.
+      typ      - styr källvalet: artikel, bok, avhandling, rapport,
+                 konferens, preprint, dataset, programvara.
+                 (amne och typ filtrerar inte träffarna, de väljer källor.)
+      strategi - "auto" (standard) eller "bred" (alla aktiva källor direkt).
+      kallor   - uttrycklig källista, t.ex. ["diva", "openalex"]; går före
+                 strategi. Se discovery_kallor.
+      limit    - antal träffar i svaret (standard 20). Fler finns ofta:
+                 hämta nästa sida med fortsattning.
+      fran_ar/till_ar - utgivningsår (inklusive; arXiv: inskickningsår).
+      oppen_tillgang  - True/False; stöds av vissa källor (discovery_kallor).
+      land     - ISO-landskod, t.ex. "SE"; filtrerar hos källor som kan
+                 och tar med landets källor i källvalet.
+      sammanfattning_max - tecken abstract per träff (standard 300); 0 ger
+                 kortast svar. Hela abstractet: discovery_hamta.
+      fortsattning - token ur ett tidigare svar: nästa sida av samma
+                 resultat, utan nya anrop till källorna. Övriga parametrar
+                 ignoreras då.
+      limit_per_kalla - träffar per källa före sammanslagning (standard 10).
+      filter   - källspecifika råfilter: {"openalex": {"topics.id": "..."}}.
 
-    Varje träff har fälten: kalla, kalla_id, doi, titel, forfattare, ar, typ,
-    url, oa_lank, citeringar, sammanfattning (abstract, kapat — markerat med
-    "…" och sammanfattning_kapad=true; hela texten ges av discovery_hamta)
-    samt hittad_i (alla källor som hittade posten). Källor som saknar
-    abstract (t.ex. EconBiz och de flesta Libris-poster) ger null.
-    Resultatet rangordnas efter relevans: varje källas egen ordning vägs
-    samman, och en post som flera källor hittar rankas högre. En källa
-    som fallerar eller svarar för långsamt stoppar inte de andra — dess fel
-    rapporteras under "fel", och svarstiden per lyckad källa under
-    "per_kalla".
+    Varje träff har: kalla, kalla_id, doi, titel, forfattare (högst tre;
+    forfattare_antal anger totalen), ar, typ, url, oa_lank, citeringar,
+    sammanfattning (kapat abstract, sammanfattning_kapad), hittad_i.
+    Träffarna rangordnas efter relevans; en post som flera oberoende källor
+    hittar rankas högre. En källa som fallerar redovisas under fel, och en
+    som nyss varit överbelastad pausas en stund och står under ej_fragade.
     """
     try:
+        if fortsattning:
+            return providers.sok_fortsattning(fortsattning)
         return providers.sok_alla(
             q,
             kallor=kallor,
+            strategi=strategi,
+            amne=amne or None,
+            typ=typ or None,
+            limit=limit,
             limit_per_kalla=limit_per_kalla,
             fran_ar=fran_ar or None,
             till_ar=till_ar or None,
@@ -693,7 +725,11 @@ def discovery_kallor() -> DiscoveryKallorResultat:
     En källa som kräver en nyckel eller kontakt-e-post som saknas i .env
     är "aktiv": false med en förklaring i "inaktiverad_orsak". Fältet
     "svarscache" visar om svarscachen är aktiv, dess livstider och, om den
-    är avstängd, varför.
+    är avstängd, varför. Varje källa har en "profil" (roll, språk, ämnen,
+    typer, land) som styr källvalet i discovery_sok, och — när den har
+    anropats — "statistik_sedan_start" (anrop, cacheträffar, fel,
+    medeltid, eventuell paus). "amnen" och "typer" listar giltiga värden
+    för discovery_soks parametrar amne och typ.
 
     Listan är inbyggd i servern (providers.py), inte hämtad över nätet.
     """

@@ -51,6 +51,7 @@ import kallkonfig
 import libris_client
 import nva_client
 import openalex_client
+import orkestrering
 import osf_client
 import publicera_client
 import semanticscholar_client
@@ -555,9 +556,13 @@ def lista_kallor() -> dict:
             "beskrivning": p["beskrivning"],
             "aktiv": p["aktiv"],
             "filterstod": p.get("filterstod", []),
+            "profil": orkestrering.profil(namn),
         }
         if p.get("krav_saknas"):
             rad["inaktiverad_orsak"] = p["krav_saknas"]
+        stat = orkestrering.statistik().get(namn)
+        if stat:
+            rad["statistik_sedan_start"] = stat
         sokbara.append(rad)
 
     berikning = []
@@ -573,71 +578,79 @@ def lista_kallor() -> dict:
             rad["inaktiverad_orsak"] = p["krav_saknas"]
         berikning.append(rad)
 
-    return {"kallor": sokbara, "berikningskallor": berikning, "svarscache": svarscache.status()}
+    return {
+        "kallor": sokbara,
+        "berikningskallor": berikning,
+        "svarscache": svarscache.status(),
+        "amnen": orkestrering.AMNEN,
+        "typer": list(orkestrering.TYPER),
+    }
 
 
 def _aktiva_providers() -> dict[str, dict]:
     return {namn: p for namn, p in PROVIDERS.items() if p["aktiv"]}
 
 
-def sok_alla(
-    q: str,
-    *,
-    kallor: list[str] | None = None,
-    limit_per_kalla: int = 10,
-    fran_ar: int | None = None,
-    till_ar: int | None = None,
-    oppen_tillgang: bool | None = None,
-    land: str | None = None,
-    filter: dict[str, dict] | None = None,
-    sammanfattning_max: int = 300,
-) -> dict:
-    """Slår mot flera källor parallellt och slår ihop de normaliserade träffarna.
+# Delar av böcker och tidskriftsnummer som förlagen registrerar med egen
+# DOI men som inte är publikationer i sig (Crossref: "Copyright", "Index",
+# "Front Matter" …). De matchar frågan bara via bokens titel och tränger
+# undan riktiga träffar.
+_KRINGMATERIAL = frozenset({
+    "copyright", "copyright page", "dedication", "front matter", "frontmatter",
+    "back matter", "backmatter", "index", "subject index", "author index",
+    "references", "bibliography", "contents", "table of contents",
+    "contributors", "list of contributors", "notes on contributors",
+    "about the authors", "about the author", "acknowledgments",
+    "acknowledgements", "preface", "foreword", "title page", "half title",
+    "list of figures", "list of tables", "abbreviations", "cover",
+    "editorial board", "masthead", "series page", "blank page",
+})
 
-    q               - fritextfråga som skickas till varje vald källa.
-    kallor          - lista med källnamn (se lista_kallor). Utelämnad = alla
-                      aktiva källor. En avstängd källa kan inte väljas
-                      explicit heller — den finns inte i sökrummet.
-    limit_per_kalla - max antal träffar per källa innan sammanslagning.
-    fran_ar/till_ar - utgivningsårsintervall som skickas till varje källa.
-    oppen_tillgang  - filtrera på öppen tillgång (stöds inte av alla källor).
-    land            - ISO-landskod för författarnas institutioner (samma).
-    filter          - källspecifika råfilter: {"openalex": {...}, ...}.
-    sammanfattning_max - abstractet i varje träff kapas till så många tecken
-                      (markerat med "…" och sammanfattning_kapad=True);
-                      0 utelämnar det. discovery_hamta ger hela texten.
+
+def _ar_kringmaterial(traff: dict) -> bool:
+    """Kringmaterial, eller en post utan titel (går varken att bedöma eller citera)."""
+    titel = " ".join(str(traff.get("titel") or "").lower().split()).strip(" .:")
+    return not titel or titel in _KRINGMATERIAL
+
+
+def _fraga_kallor(
+    namn_lista: list[str],
+    aktiva: dict[str, dict],
+    *,
+    q: str | dict,
+    limit_per_kalla: int,
+    fran_ar: int | None,
+    till_ar: int | None,
+    oppen_tillgang: bool | None,
+    land: str | None,
+    filter: dict[str, dict] | None,
+) -> tuple[dict[str, list[dict]], dict[str, dict], dict[str, str]]:
+    """Frågar källorna parallellt: (träfflistor, per_kalla, fel).
 
     Varje källa frågas i en egen tråd med en gemensam tidsgräns
     (_PER_KALLA_TIDSGRANS_S) — en långsam eller nedgången källa fördröjer
-    inte svaret och fäller inte hela anropet, utan redovisas under "fel".
-    Träfflistorna slås ihop på DOI och rangordnas efter relevans med
-    reciprocal rank fusion (se _sla_ihop_och_rangordna).
+    inte svaret och fäller inte hela anropet, utan redovisas under fel.
     """
-    aktiva = _aktiva_providers()
-    valda = kallor or list(aktiva)
-    okanda = [k for k in valda if k not in aktiva]
-    if okanda:
-        tillgangliga = ", ".join(aktiva) or "(inga aktiva källor)"
-        raise ValueError(f"Okänd eller avstängd källa/källor: {', '.join(okanda)}. Tillgängliga: {tillgangliga}.")
-
     def _fraga_en(namn: str):
         provider = aktiva[namn]
         kalla_filter = (filter or {}).get(namn)
+        fraga = orkestrering.fraga_for_kalla(q, namn)
         t0 = time.monotonic()
         try:
             svar, fran_cache = svarscache.hamta_eller_kor(
                 namn, svarscache.SOK,
-                {"q": q, "limit": limit_per_kalla, "fran_ar": fran_ar, "till_ar": till_ar,
+                {"q": fraga, "limit": limit_per_kalla, "fran_ar": fran_ar, "till_ar": till_ar,
                  "oppen_tillgang": oppen_tillgang, "land": land, "filter": kalla_filter},
-                lambda: provider["sok"](q, limit_per_kalla, fran_ar, till_ar, oppen_tillgang, land, kalla_filter),
+                lambda: provider["sok"](fraga, limit_per_kalla, fran_ar, till_ar, oppen_tillgang, land, kalla_filter),
             )
-            traffar = [_till_enhetligt(t) for t in svar.get("traffar", [])]
+            traffar = [_till_enhetligt(t) for t in svar.get("traffar", []) if not _ar_kringmaterial(t)]
             return namn, {
                 "traffar": traffar,
                 "totalt": svar.get("totalt"),
-                "antal": svar.get("antal", len(traffar)),
+                "antal": len(traffar),
                 "tid_s": round(time.monotonic() - t0, 2),
                 "fran_cache": fran_cache,
+                "fraga": fraga,
             }, None
         except provider["fel"] as exc:
             return namn, None, str(exc)
@@ -646,54 +659,202 @@ def sok_alla(
         except Exception as exc:  # oväntat fel i en källa får inte fälla helheten
             return namn, None, f"Oväntat fel: {exc}"
 
+    listor: dict[str, list[dict]] = {}
     per_kalla: dict[str, dict] = {}
     fel: dict[str, str] = {}
-    listor: dict[str, list[dict]] = {}
+    if not namn_lista:
+        return listor, per_kalla, fel
 
     # Poolen stängs utan att vänta in källor som överskrider tidsgränsen:
     # deras trådar får löpa klart i bakgrunden (klienternas egen timeout
     # sätter taket), men svaret väntar inte på dem.
-    pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(valda)))
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=len(namn_lista))
     try:
-        framtider = {pool.submit(_fraga_en, namn): namn for namn in valda}
+        framtider = {pool.submit(_fraga_en, namn): namn for namn in namn_lista}
         klara, ej_klara = concurrent.futures.wait(framtider, timeout=_PER_KALLA_TIDSGRANS_S)
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
     for framtid in ej_klara:
-        fel[framtider[framtid]] = f"Källan svarade inte inom {_PER_KALLA_TIDSGRANS_S:.0f} s."
+        namn = framtider[framtid]
+        fel[namn] = f"Källan svarade inte inom {_PER_KALLA_TIDSGRANS_S:.0f} s."
+        orkestrering.registrera(namn, ok=False, fel=fel[namn], tidsgrans=True)
     for framtid in klara:
         namn, resultat, felmeddelande = framtid.result()
         if felmeddelande is not None:
             fel[namn] = felmeddelande
+            orkestrering.registrera(
+                namn, ok=False, fel=felmeddelande,
+                overbelastad=orkestrering.ar_overbelastning(felmeddelande),
+            )
             continue
+        orkestrering.registrera(namn, ok=True, tid_s=resultat["tid_s"], fran_cache=resultat["fran_cache"])
         listor[namn] = resultat["traffar"]
-        per_kalla[namn] = {
-            "totalt": resultat["totalt"],
-            "antal": resultat["antal"],
-            "tid_s": resultat["tid_s"],
-            "fran_cache": resultat["fran_cache"],
-        }
+        per_kalla[namn] = {k: resultat[k] for k in ("totalt", "antal", "tid_s", "fran_cache")}
+        if isinstance(q, dict):
+            per_kalla[namn]["fraga"] = resultat["fraga"]
+    return listor, per_kalla, fel
 
-    # Ordning i valda-listan, inte i färdigordning — annars styr svarstiden
-    # vilken källas fält som vinner vid sammanslagning.
-    deduplicerade = _sla_ihop_och_rangordna([(namn, listor[namn]) for namn in valda if namn in listor])
 
-    # Kapningen sker efter sammanslagningen, så att en dubblett med längre
-    # abstract hos en annan källa inte förlorar texten i förväg.
-    for t in deduplicerade:
-        t["sammanfattning"], t["sammanfattning_kapad"] = kapa_text(t.get("sammanfattning"), sammanfattning_max)
+def _kompakt(traff: dict, sammanfattning_max: int) -> dict:
+    """Träffen i svarsform: kapat abstract och högst tre författare."""
+    ut = dict(traff)
+    ut["sammanfattning"], ut["sammanfattning_kapad"] = kapa_text(traff.get("sammanfattning"), sammanfattning_max)
+    forfattare = traff.get("forfattare") or []
+    if len(forfattare) > 3:
+        ut["forfattare"] = forfattare[:3]
+        ut["forfattare_antal"] = len(forfattare)
+    return ut
+
+
+def _sida(resultat: dict, start: int) -> dict:
+    """En sida ur ett sparat, sammanslaget resultat."""
+    alla = resultat["_alla"]
+    limit = resultat["_limit"]
+    sida = alla[start:start + limit]
+    ut = {k: v for k, v in resultat.items() if not k.startswith("_")}
+    ut["traffar"] = [_kompakt(t, resultat["_sammanfattning_max"]) for t in sida]
+    ut["antal"] = len(sida)
+    ut["antal_sammanslagna"] = len(alla)
+    ut["fran_plats"] = start + 1
+    if start + limit < len(alla):
+        ut["fortsattning"] = orkestrering.spara_fortsattning(dict(resultat, _start=start + limit))
+    return ut
+
+
+def sok_alla(
+    q: str | dict[str, str],
+    *,
+    kallor: list[str] | None = None,
+    strategi: str = "auto",
+    amne: str | None = None,
+    typ: str | None = None,
+    limit: int = 20,
+    limit_per_kalla: int = 10,
+    fran_ar: int | None = None,
+    till_ar: int | None = None,
+    oppen_tillgang: bool | None = None,
+    land: str | None = None,
+    filter: dict[str, dict] | None = None,
+    sammanfattning_max: int = 300,
+) -> dict:
+    """Orkestrerad sökning över flera källor, sammanslagen och rangordnad.
+
+    q         - fritextfråga, eller en fråga per språk {"sv": …, "en": …};
+                källor med språktyngdpunkt (Libris, DiVA, NVA …) får sitt
+                språk, övriga engelska.
+    kallor    - uttrycklig källista; går före strategi.
+    strategi  - "auto": en kärna av källor efter frågans språk och
+                amne/typ/land, breddad till allmänna källor och språkkällor
+                om kärnan ger färre än hälften av limit. Ämnes- och
+                typkällor som inte passar frågan frågas aldrig i auto.
+                "bred": alla aktiva källor på en gång.
+    amne/typ  - styr källvalet (se orkestrering.AMNEN/TYPER), filtrerar inte.
+    limit     - antal träffar i svaret, efter sammanslagning. Resten nås
+                med fortsattning-token (sok_fortsattning).
+    limit_per_kalla, fran_ar, till_ar, oppen_tillgang, land, filter -
+                skickas till varje källa (land styr även källvalet).
+    sammanfattning_max - abstractet kapas till så många tecken; 0 utelämnar det.
+
+    En källa som nyss varit överbelastad (429 eller tidsgräns) är pausad
+    en stund och redovisas under ej_fragade i stället för att fördröja svaret.
+    """
+    if strategi not in ("auto", "bred"):
+        raise ValueError(f"Okänd strategi '{strategi}'. Välj 'auto' eller 'bred'.")
+    if amne and amne not in orkestrering.AMNEN:
+        raise ValueError(f"Okänt ämne '{amne}'. Giltiga: {', '.join(orkestrering.AMNEN)}.")
+    if typ and typ not in orkestrering.TYPER:
+        raise ValueError(f"Okänd typ '{typ}'. Giltiga: {', '.join(orkestrering.TYPER)}.")
+    if isinstance(q, dict):
+        q = {k.strip().lower(): v for k, v in q.items() if v and v.strip()}
+    if not q:
+        raise ValueError("Ange en fråga (q).")
+
+    aktiva = _aktiva_providers()
+    ej_fragade: dict[str, str] = {}
+
+    if kallor:
+        okanda = [k for k in kallor if k not in aktiva]
+        if okanda:
+            tillgangliga = ", ".join(aktiva) or "(inga aktiva källor)"
+            raise ValueError(f"Okänd eller avstängd källa/källor: {', '.join(okanda)}. Tillgängliga: {tillgangliga}.")
+        karna = {k: "uttryckligen vald" for k in kallor}
+    elif strategi == "bred":
+        karna = {k: "strategi: bred" for k in aktiva}
+    else:
+        karna, ej_fragade = orkestrering.valj_kallor(list(aktiva), q=q, amne=amne, typ=typ, land=land)
+
+    def _utan_pausade(kandidater: dict[str, str]) -> dict[str, str]:
+        kvar = {}
+        for namn, skal in kandidater.items():
+            pausad = orkestrering.ar_pausad(namn)
+            if pausad:
+                ej_fragade[namn] = f"pausad i {pausad:.0f} s till efter överbelastning"
+            else:
+                kvar[namn] = skal
+        return kvar
+
+    karna = _utan_pausade(karna)
+    # Ett limit större än vad kärnan kan ge med limit_per_kalla höjer
+    # antalet per källa, i stället för att fler källor frågas i onödan.
+    limit_per_kalla = min(50, max(limit_per_kalla, -(-limit // max(1, len(karna)))))
+    parametrar = dict(q=q, limit_per_kalla=limit_per_kalla, fran_ar=fran_ar, till_ar=till_ar,
+                      oppen_tillgang=oppen_tillgang, land=land, filter=filter)
+    listor, per_kalla, fel = _fraga_kallor(list(karna), aktiva, **parametrar)
+    fragade = dict(karna)
+
+    # Breddning: bara i auto-läget, bara när kärnan gav för få unika träffar.
+    breddad = False
+    if strategi == "auto" and not kallor:
+        unika = sum(
+            orkestrering.ar_traffsaker(t, q) for t in _sla_ihop_och_rangordna(list(listor.items()))
+        )
+        if orkestrering.behover_breddning(unika, limit):
+            extra = _utan_pausade({
+                namn: f"breddning: kärnan gav bara {unika} träffar med frågans ord"
+                for namn, skal in ej_fragade.items() if skal == "frågas vid breddning"
+            })
+            if extra:
+                breddad = True
+                for namn in extra:
+                    ej_fragade.pop(namn, None)
+                l2, p2, f2 = _fraga_kallor(list(extra), aktiva, **parametrar)
+                listor.update(l2)
+                per_kalla.update(p2)
+                fel.update(f2)
+                fragade.update(extra)
+
+    # Ordning i fragade (kärnan först), inte i färdigordning — annars styr
+    # svarstiden vilken källas fält som vinner vid sammanslagning.
+    alla = _sla_ihop_och_rangordna([(namn, listor[namn]) for namn in fragade if namn in listor])
+    # Träffar med frågans ord i titel eller abstract före övriga, med
+    # rangordningen bevarad inom båda grupperna. Övriga är ofta källor som
+    # matchat enstaka ord (Crossref) och hamnar annars högt bara för att de
+    # var först i sin källas lista.
+    alla.sort(key=lambda t: not orkestrering.ar_traffsaker(t, q))
 
     resultat = {
         "fraga": q,
-        "kallor": list(valda),
+        "strategi": "uttrycklig källista" if kallor else strategi,
+        "breddad": breddad,
+        "fragade_kallor": fragade,
+        "ej_fragade": ej_fragade,
         "per_kalla": per_kalla,
-        "antal": len(deduplicerade),
-        "traffar": deduplicerade,
+        "_alla": alla,
+        "_limit": max(1, limit),
+        "_sammanfattning_max": sammanfattning_max,
     }
     if fel:
         resultat["fel"] = fel
-    return resultat
+    return _sida(resultat, 0)
+
+
+def sok_fortsattning(token: str) -> dict:
+    """Nästa sida ur ett tidigare discovery_sok-resultat, utan nya källanrop."""
+    sparat = orkestrering.hamta_fortsattning(token)
+    if sparat is None:
+        raise ValueError("Fortsättningen finns inte längre (den gäller en timme). Sök igen.")
+    return _sida(sparat, sparat["_start"])
 
 
 # Konstanten i reciprocal rank fusion. 60 är standardvärdet i litteraturen

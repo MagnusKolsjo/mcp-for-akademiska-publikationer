@@ -6,6 +6,20 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
 ## [Unreleased]
 
 ### Tillagt
+- Sökorkestrering i `discovery_sok` (`orkestrering.py`): i stället för att
+  fråga alla källor väljs en kärna — OpenAlex och Crossref plus källor som
+  passar frågans språk, `amne`, `typ` och `land` — som breddas till
+  allmänna och nordiska källor bara när för få träffar innehåller frågans
+  ord. `strategi="bred"` frågar alla. `q` kan ges per språk
+  (`{"sv": …, "en": …}`). Svaret redovisar `fragade_kallor` med skäl och
+  `ej_fragade`.
+- `discovery_sok`: `limit` gäller hela svaret; nästa sida hämtas med
+  `fortsattning` utan nya källanrop. Högst tre författare per träff
+  (`forfattare_antal` anger totalen).
+- Kretsbrytare: en källa som svarar 429 eller missar tidsgränsen två gånger
+  i rad pausas (`DISCOVERY_PAUS_VID_OVERBELASTNING_S`, standard 300 s).
+  `discovery_kallor` visar varje källas profil och statistik sedan start.
+
 - Abstract (`sammanfattning`) i det gemensamma träffschemat, hämtat från
   alla källor som har det: OpenAlex (återskapat ur `abstract_inverted_index`),
   Crossref, DataCite, arXiv, Libris, SwePub, DiVA, Publicera, NVA, OSF,
@@ -132,6 +146,11 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   (`arxiv.org/pdf/...`), med eller utan `.pdf`-ändelse och version.
 
 ### Ändrat
+- `discovery_sok` frågar inte längre alla aktiva källor som standard; se
+  ovan. `strategi="bred"` ger det tidigare beteendet.
+- Träffar med frågans ord i titel eller abstract rangordnas före övriga,
+  och kringmaterial ("Copyright", "Index", "Front Matter" …) och poster
+  utan titel sorteras bort.
 - Migrerad till `mcp` 2.x (`MCPServer` i stället för `FastMCP`, `mcp>=2.0,<3`
   i `requirements.txt`).
 - Http-transporten körs nu via den gemensamma `mcp_transport.starta()` i
