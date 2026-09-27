@@ -161,6 +161,10 @@ därmed en adress (post, stycke, sida) som går att kontrollera i efterhand.
   Discovery utan biblioteksverktyg och utan PDF- och embeddingpaket.
   `DISCOVERY_BIBLIOTEK_SEMANTISK=false` behåller ordsökningen men slår av
   embeddings. Kräver `DATABASE_URL` och paketen i `requirements-bibliotek.txt`.
+- **Bevarandetid:** nedladdade fulltexter och skannade PDF:er raderas
+  efter 30 dagar (`DISCOVERY_FULLTEXT_BEVARA_DAGAR`, 0 = för alltid).
+  Posten med metadata, abstract och referens finns kvar, och
+  `discovery_spara` hämtar fulltexten igen vid behov.
 - **Delad drift:** körs servern över http visas texter utan öppen licens
   (Creative Commons eller public domain) bara som utdrag. Lokalt är
   biblioteket användarens eget.

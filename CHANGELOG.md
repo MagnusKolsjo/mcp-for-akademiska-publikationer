@@ -21,6 +21,9 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   http(s)-adresser, och varje omdirigering kontrolleras (skydd mot SSRF).
 - Schemat flyttat till `db/schema_postgres.sql` och `db/schema_sqlite.sql`
   (plus `db/vektor_*.sql`), eftersom det vuxit förbi inline-storlek.
+- Bevarandetid för nedladdade fulltexter: text, stycken, vektorer och
+  OCR-köns PDF:er raderas efter `DISCOVERY_FULLTEXT_BEVARA_DAGAR` dagar
+  (standard 30, 0 = för alltid). Metadata, abstract och referens behålls.
 - OCR av skannade sidor i arbetsbiblioteket med `pdftext_skydd.py`
   (samma modul som övriga servrar i sviten: pymupdf4llm + Tesseract under
   minnes- och tidsvakt), sida för sida för korrekta sidnummer, på

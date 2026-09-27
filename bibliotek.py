@@ -21,6 +21,7 @@ Konfiguration i .env:
     DISCOVERY_STYCKE_MAX_TECKEN      standard: 800
     DISCOVERY_STYCKE_MIN_TECKEN      standard: 100
     DISCOVERY_STYCKE_OVERLAPP_TECKEN standard: 200
+    DISCOVERY_FULLTEXT_BEVARA_DAGAR  standard: 30 (0 = behåll för alltid)
 
 Avstängt (eller utan databas) registreras inga biblioteksverktyg, och
 PDF- och embeddingpaketen importeras aldrig.
@@ -34,6 +35,7 @@ import os
 import re
 import threading
 import time
+from pathlib import Path
 
 import db
 import kallkonfig
@@ -47,6 +49,13 @@ EMBEDDING_MODELL = os.environ.get("DISCOVERY_EMBEDDING_MODELL", "intfloat/multil
 STYCKE_MAX = int(os.environ.get("DISCOVERY_STYCKE_MAX_TECKEN", "800"))
 STYCKE_MIN = int(os.environ.get("DISCOVERY_STYCKE_MIN_TECKEN", "100"))
 STYCKE_OVERLAPP = int(os.environ.get("DISCOVERY_STYCKE_OVERLAPP_TECKEN", "200"))
+
+# Nedladdade fulltexter raderas efter så här många dagar: texten, styckena
+# och vektorerna, samt skannade PDF:er i OCR-kön. Posten med metadata,
+# abstract och referens finns kvar, och fulltexten kan hämtas igen med
+# discovery_spara. 0 behåller fulltexterna för alltid.
+BEVARA_DAGAR = float(os.environ.get("DISCOVERY_FULLTEXT_BEVARA_DAGAR", "30"))
+_RENSA_VAR_S = 6 * 3600
 
 # Över http med flera användare får texter utan öppen licens bara visas som
 # utdrag: servern ska inte fungera som vidaredistribution av upphovsrättsligt
@@ -104,6 +113,8 @@ def _starta() -> None:
                     )
                     log.warning("Bibliotekets semantiska sökning avstängd: %s", _semantisk_orsak)
         _startad = True
+    if _avstangd_orsak is None:
+        rensa_gamla_fulltexter()
 
 
 def _kontrollera() -> None:
@@ -129,7 +140,78 @@ def status() -> dict:
     else:
         rad["embedding_modell"] = EMBEDDING_MODELL
     rad["delad_drift"] = _DELAD_DRIFT
+    rad["fulltext_bevaras_dagar"] = BEVARA_DAGAR or "för alltid"
     return rad
+
+
+# ---------------------------------------------------------------------------
+# Rensning av gamla fulltexter
+# ---------------------------------------------------------------------------
+
+_senast_rensat = 0.0
+_rensa_las = threading.Lock()
+
+
+def rensa_gamla_fulltexter(*, tvinga: bool = False) -> dict:
+    """Raderar fulltexter (text, stycken, vektorer) och OCR-köns PDF:er som
+    är äldre än BEVARA_DAGAR. Körs vid start och därefter högst var sjätte
+    timme i samband med att biblioteket används.
+
+    Metadata, abstract och referens behålls; posten får fulltext_status
+    "raderad" och kan hämtas igen med discovery_spara."""
+    global _senast_rensat
+    if not BEVARA_DAGAR or _avstangd_orsak is not None:
+        return {"rensat": False}
+    with _rensa_las:
+        if not tvinga and time.time() - _senast_rensat < _RENSA_VAR_S:
+            return {"rensat": False}
+        _senast_rensat = time.time()
+    grans = time.time() - BEVARA_DAGAR * 86400
+    p, pre = db.ph(), db.prefix()
+    try:
+        with db.hamta_db(vektor=_semantisk_orsak is None) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT id FROM {pre}bibliotek_poster WHERE fulltext_status = {p} "
+                f"AND COALESCE(fulltext_hamtad, sparad) < {p}", ("hämtad", grans))
+            gamla = [r[0] for r in cur.fetchall()]
+            for pid in gamla:
+                if not db.ar_postgres() and _semantisk_orsak is None:
+                    cur.execute(
+                        "DELETE FROM bibliotek_embeddings WHERE stycke_id IN "
+                        "(SELECT id FROM bibliotek_stycken WHERE post_id = ?)", (pid,))
+                cur.execute(f"DELETE FROM {pre}bibliotek_stycken WHERE post_id = {p}", (pid,))
+                cur.execute(
+                    f"UPDATE {pre}bibliotek_poster SET fulltext = NULL, sidor = NULL, tecken_totalt = 0, "
+                    f"fulltext_status = {p}, fulltext_hamtad = NULL, uppdaterad = {p} WHERE id = {p}",
+                    (f"raderad efter {BEVARA_DAGAR:g} dagar — hämta igen med discovery_spara", time.time(), pid))
+    except Exception as exc:  # rensningen får aldrig fälla ett verktygsanrop
+        log.warning("Rensningen av gamla fulltexter misslyckades: %s", exc)
+        return {"rensat": False, "fel": str(exc)}
+    pdf = _rensa_ocr_ko(grans)
+    if gamla or pdf:
+        log.info("Rensade fulltext för %d poster och %d PDF:er i OCR-kön", len(gamla), pdf)
+    return {"rensat": True, "fulltexter": len(gamla), "pdf_i_ocr_ko": pdf}
+
+
+def _rensa_ocr_ko(grans: float) -> int:
+    """Raderar skannade PDF:er i OCR-kön (pdftext_skydd) som är äldre än gränsen."""
+    mapp = Path(os.environ.get("DISCOVERY_OCR_KO_MAPP", "").strip() or Path(__file__).parent / "ocr_ko")
+    raderade = 0
+    for fil in (mapp / "filer").glob("*.pdf") if (mapp / "filer").is_dir() else []:
+        try:
+            if fil.stat().st_mtime < grans:
+                fil.unlink()
+                raderade += 1
+        except OSError:
+            pass
+    ko = mapp / "ko.jsonl"
+    if raderade and ko.is_file():
+        # Köposter vars fil är borta pekar inte längre på något.
+        kvar = [rad for rad in ko.read_text(encoding="utf-8").splitlines()
+                if rad.strip() and (mapp / json.loads(rad).get("fil", "")).is_file()]
+        ko.write_text("\n".join(kvar) + ("\n" if kvar else ""), encoding="utf-8")
+    return raderade
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +309,7 @@ def spara(post: dict, *, projekt: str | None, referens: str | None, fulltext_res
     """Sparar eller uppdaterar en post. fulltext_resultat är (Fulltext|None, [försök])
     eller None om fulltext inte ska hämtas."""
     _kontrollera()
+    rensa_gamla_fulltexter()
     pid = post_id(post)
     nu = time.time()
     p, pre = db.ph(), db.prefix()
@@ -259,6 +342,7 @@ def spara(post: dict, *, projekt: str | None, referens: str | None, fulltext_res
             falt.update({
                 "fulltext": ft.text if ft else None,
                 "fulltext_url": ft.url if ft else None,
+                "fulltext_hamtad": nu if ft else None,
                 "fulltext_metod": ft.metod if ft else None,
                 "licens": ft.licens if ft else None,
                 "sidor": json.dumps(ft.sidor) if ft and ft.sidor else None,
@@ -323,6 +407,8 @@ def spara(post: dict, *, projekt: str | None, referens: str | None, fulltext_res
         "oppen_licens": oppen_licens(licens), "tecken_totalt": tecken, "stycken": antal_stycken,
         "referens": referens,
     }
+    if status_ == "hämtad" and BEVARA_DAGAR:
+        ut["fulltext_raderas_efter_dagar"] = BEVARA_DAGAR
     if ft is not None:
         ut["fulltext_metod"] = ft.metod
         if ft.ocr_sidor:

@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS discovery.bibliotek_poster (
     fulltext TEXT,
     fulltext_url TEXT,
     fulltext_metod TEXT,
+    fulltext_hamtad DOUBLE PRECISION,
     fulltext_status TEXT NOT NULL,
     licens TEXT,
     sidor TEXT,
