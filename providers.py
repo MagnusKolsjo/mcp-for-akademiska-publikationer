@@ -24,10 +24,11 @@ Lägga till en ny sökbar källa:
      kallkonfig.aktiv(namn) och "krav_saknas" om källan kräver nyckel/e-post.
   3. Dokumentera i README och config.example.env.
 
-Källor med ett helt annat frågespråk (Libris) eller ett eget dedikerat
-MCP-verktyg (Libris, Crossref, DataCite, arXiv — "Befintliga verktyg
-BEHÅLLS oförändrade") har kvar sina egna verktyg utanför den här filen,
-men deltar ändå i den enade sökningen via PROVIDERS nedan precis som förut.
+Libris, Crossref, DataCite och arXiv har dessutom egna MCP-verktyg med
+rikare frågespråk (libris_sok, cr_sok, dc_sok, arxiv_sok). De deltar i den
+enade sökningen via PROVIDERS precis som övriga källor, och samma
+DISCOVERY_<KALLA>_AKTIV styr både deras rad här och om deras egna verktyg
+registreras (se mcp_server.py).
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ import econbiz_client
 import europepmc_client
 import hal_client
 import kallkonfig
+import libris_client
 import nva_client
 import openalex_client
 import osf_client
@@ -212,6 +214,46 @@ def _doi_kalla_hamta(client):
     return _hamta
 
 
+def _libris_normaliserad(traff: dict) -> dict:
+    """Formar en libris_client-träff (katalogpost med eget fältschema) till
+    det gemensamma schemat. DOI hämtas ur postens identifierare när den har
+    en — det gäller främst e-böcker och rapporter."""
+    doi = next(
+        (i.get("varde") for i in traff.get("identifierare") or []
+         if (i.get("typ") or "").upper() == "DOI"),
+        None,
+    )
+    return {
+        "kalla": "libris",
+        "kalla_id": traff.get("libris_id"),
+        "doi": doi,
+        "titel": traff.get("titel"),
+        "forfattare": [{"namn": u["namn"]} for u in traff.get("upphov") or [] if u.get("namn")],
+        "ar": traff.get("ar"),
+        "typ": traff.get("verk_typ") or traff.get("instans_typ"),
+        "url": traff.get("uri"),
+        "oa_lank": None,
+        "citeringar": None,
+    }
+
+
+def _libris_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+    """Libris frågespråk (mellanslag = OCH, | = ELLER m.m.) tar emot q som
+    det är. kalla_filter är råa Libris-filter, samma som libris_sok(filter=)."""
+    filt = dict(kalla_filter or {})
+    if fran_ar:
+        filt.setdefault("min-publication.year", fran_ar)
+    if till_ar:
+        filt.setdefault("max-publication.year", till_ar)
+    svar = libris_client.sok(q, limit=limit, filter=filt or None)
+    traffar = [_libris_normaliserad(t) for t in svar.get("traffar", [])]
+    return {"totalt": svar.get("totalt"), "antal": len(traffar), "traffar": traffar}
+
+
+def _libris_hamta(id_: str) -> dict:
+    return _libris_normaliserad(libris_client.sammanfatta_post(id_))
+
+
 def _swepub_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     """SwePub/Xsearch stödjer bara fritext — övriga parametrar ignoreras."""
     return swepub_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
@@ -299,7 +341,7 @@ PROVIDERS: dict[str, dict] = {
         "sok": _doi_kalla_sok(crossref_client, kalla_namn="crossref"),
         "hamta": _doi_kalla_hamta(crossref_client),
         "fel": crossref_client.CrossrefFel,
-        "aktiv": True,
+        "aktiv": kallkonfig.aktiv("crossref"),
         "krav_saknas": None,
         "filterstod": [],
     },
@@ -309,7 +351,7 @@ PROVIDERS: dict[str, dict] = {
         "sok": _doi_kalla_sok(datacite_client, kalla_namn="datacite"),
         "hamta": _doi_kalla_hamta(datacite_client),
         "fel": datacite_client.DataCiteFel,
-        "aktiv": True,
+        "aktiv": kallkonfig.aktiv("datacite"),
         "krav_saknas": None,
         "filterstod": [],
     },
@@ -319,9 +361,22 @@ PROVIDERS: dict[str, dict] = {
         "sok": _arxiv_sok,
         "hamta": _arxiv_hamta,
         "fel": arxiv_client.ArxivFel,
-        "aktiv": True,
+        "aktiv": kallkonfig.aktiv("arxiv"),
         "krav_saknas": None,
         "filterstod": [],
+    },
+    "libris": {
+        "etikett": "Libris",
+        "beskrivning": (
+            "Sveriges nationella bibliotekskatalog (KB): böcker, avhandlingar, "
+            "rapporter och tidskrifter. libris_sok har rikare filter."
+        ),
+        "sok": _libris_sok,
+        "hamta": _libris_hamta,
+        "fel": libris_client.LibrisFel,
+        "aktiv": kallkonfig.aktiv("libris"),
+        "krav_saknas": None,
+        "filterstod": ["råa Libris-filter, t.ex. instanceOf.language.@id"],
     },
     "openalex": {
         "etikett": "OpenAlex",

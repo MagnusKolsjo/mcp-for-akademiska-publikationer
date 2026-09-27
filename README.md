@@ -16,7 +16,7 @@ normaliserar sina träffar till en gemensam form; arXiv har ett eget, rikare
 träffschema som normaliseras i providers.py för att också delta i den enade
 sökningen. Det gör att `discovery_sok` kan slå mot flera källor samtidigt och
 returnera en sammanslagen träfflista. Libris har ett eget, rikare frågespråk
-och egna verktyg, utanför den enade sökningen.
+och egna verktyg, men deltar också i den enade sökningen.
 
 Nedladdning och lagring av fulltext ligger utanför den här servern — discovery
 hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
@@ -25,7 +25,7 @@ hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
 
 | Källa | Täckning | Roll | Krav | Attribution/villkor |
 |---|---|---|---|---|
-| [Libris](https://libris.kb.se/api/docs/reference/find/) | Svenska bibliotekskatalogen (KB) | Sökbar, eget frågespråk | — | — |
+| [Libris](https://libris.kb.se/api/docs/reference/find/) | Svenska bibliotekskatalogen (KB) | Sökbar, eget frågespråk och egna verktyg | — | — |
 | [Crossref](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) | DOI:er: artiklar, böcker, konferensbidrag | Sökbar | — | `CROSSREF_MAILTO` ger polite pool (frivilligt) |
 | [DataCite](https://support.datacite.org/docs/api) | DOI:er: forskningsdata, programvara, preprints | Sökbar | — | — |
 | [arXiv](https://info.arxiv.org/help/api/user-manual.html) | Preprints: fysik, matematik, data, biologi m.fl. | Sökbar, eget frågespråk | — | Max 1 anrop/3 s ([villkor](https://info.arxiv.org/help/api/tou.html)); *"Thank you to arXiv for use of its open access interoperability."* |
@@ -44,9 +44,10 @@ hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
 | [DOAJ](https://doaj.org) | Granskade open access-tidskrifter | Sökbar | — | CC0 |
 | [CORE](https://core.ac.uk) | Aggregerad fulltext/metadata | Sökbar, **avstängd som standard** | — (nyckel rekommenderas) | Icke-kommersiell fri nivå |
 
-Alla källor utom Libris, Crossref, DataCite och arXiv kan slås av eller
-på var för sig via `DISCOVERY_<KALLA>_AKTIV` i `.env`, utan kodändring.
-De fyra har egna verktyg och är alltid aktiva. En
+Alla källor kan slås av eller på var för sig via `DISCOVERY_<KALLA>_AKTIV`
+i `.env`, utan kodändring. Libris, Crossref, DataCite och arXiv har
+dessutom egna verktyg; när en av dem stängs av försvinner även dess
+verktyg ur verktygslistan. En
 källa som kräver en nyckel eller kontakt-e-post som saknas inaktiveras
 automatiskt — kör `discovery_kallor()` för att se aktiv-status och skälet.
 CORE är av som standard; sätt `DISCOVERY_CORE_AKTIV=true` för att slå på.
@@ -130,8 +131,9 @@ Käll-specifik sökning:
 ## Lägga till en ny källa
 
 Discovery är byggd för att kopplas på fler källor. Mönstret för en ny,
-av/på-bar källa (allt utom Libris/Crossref/DataCite/arXiv, som har ett äldre
-inline-mönster sedan innan av/på-systemet fanns):
+av/på-bar källa (en källa som också ska ha egna verktyg registrerar dem i
+`mcp_server.py` med `@kallverktyg("<namn>", ...)`, så att av/på-läget gäller
+dem också):
 
 1. Skriv `<namn>_client.py` med `sok()`/`hamta()` som returnerar dictar med
    minst `kalla`/`doi`/`titel` (se `openalex_client.py`), en egen felklass

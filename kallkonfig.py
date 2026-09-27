@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Magnus Kolsjö
-"""Av/på-läge, nycklar och kontaktuppgift för de nya discovery-källorna.
+"""Av/på-läge, nycklar och kontaktuppgift för discovery-källorna.
 
-Varje ny källa kan slås av eller på oberoende i .env, utan kodändring:
+Varje källa kan slås av eller på oberoende i .env, utan kodändring:
 
     DISCOVERY_<KALLA>_AKTIV       true/false (standard: true)
     DISCOVERY_<KALLA>_API_NYCKEL  källans egen API-nyckel, om den har en
 
-Gemensamt för alla nya källor:
+Gemensamt för alla källor:
 
     DISCOVERY_KONTAKT_EPOST  e-post för källor som kräver kontaktuppgift
                               (Unpaywall, artighetspooler)
@@ -21,7 +21,9 @@ ett nytt krav.
 
 En källa som kräver e-post eller nyckel men saknar det inaktiveras
 automatiskt (se `krav_saknas`); den ingår då inte i discovery_sok eller
-discovery_hamta, och discovery_kallor förklarar varför.
+discovery_hamta, och discovery_kallor förklarar varför. För Libris,
+Crossref, DataCite och arXiv styr av/på-läget dessutom om källans egna
+verktyg (libris_*, cr_*, dc_*, arxiv_*) registreras.
 """
 
 from __future__ import annotations

@@ -6,6 +6,12 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
 ## [Unreleased]
 
 ### Tillagt
+- Libris, Crossref, DataCite och arXiv kan slås av/på med
+  `DISCOVERY_<KALLA>_AKTIV` precis som övriga källor. Avstängd källa
+  ingår inte i `discovery_sok`, och dess egna verktyg (`libris_*`, `cr_*`,
+  `dc_*`, `arxiv_*`) registreras inte.
+- Libris deltar i `discovery_sok` och kan läsas via `discovery_hamta`;
+  DOI tas ur katalogpostens identifierare när den finns.
 - Licens: AGPL-3.0-or-later, med SPDX-huvud i varje Python-fil.
 - arXiv som ny källa: `arxiv_client.py`, verktygen `arxiv_sok` och
   `arxiv_hamta`, och en rad i `providers.py` så att arXiv deltar i
@@ -31,8 +37,7 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   frågas parallellt (en tråd per källa) med en delad tidsgräns på 15 s per
   källa — en långsam eller nedgången källa fördröjer inte de andra.
 - Nya källor kan slås av/på oberoende i `.env` via
-  `DISCOVERY_<KALLA>_AKTIV`, utan kodändring (gäller inte Libris/Crossref/
-  DataCite/arXiv, som behålls oförändrade). En källa som kräver en nyckel
+  `DISCOVERY_<KALLA>_AKTIV`, utan kodändring. En källa som kräver en nyckel
   eller `DISCOVERY_KONTAKT_EPOST` den saknar inaktiveras automatiskt, med
   förklaring i `discovery_kallor`. Ny gemensam infrastruktur för detta:
   `kallkonfig.py` (av/på, nycklar, User-Agent, kontakt-e-post) och

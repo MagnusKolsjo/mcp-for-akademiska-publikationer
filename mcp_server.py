@@ -23,7 +23,7 @@ Källor och verktyg:
     arxiv_sok           - sök preprints, med fältprefix, kategori och årsfilter
     arxiv_hamta         - läs en preprint via dess arXiv-id
   Enad sökning över flera källor (se providers.py för hela källregistret:
-  OpenAlex, SwePub, DiVA, Publicera, NVA, OSF Preprints, Europe PMC,
+  Libris, OpenAlex, SwePub, DiVA, Publicera, NVA, OSF Preprints, Europe PMC,
   zbMATH Open, EconBiz, HAL, DOAJ och CORE (avstängd som standard) utöver
   Crossref/DataCite/arXiv ovan; Unpaywall och Semantic Scholar används bara
   som berikningskällor för discovery_oa_lank/discovery_citeringar)
@@ -34,10 +34,10 @@ Källor och verktyg:
     discovery_citeringar- citeringsgraf för en post (OpenAlex + Semantic Scholar)
 
 Nya källor kopplas in via providers.py — se den modulen för mönstret. Varje
-ny källa (allt utom Libris/Crossref/DataCite/arXiv, som behålls oförändrade)
-kan slås av/på oberoende via DISCOVERY_<KALLA>_AKTIV i .env; en källa som
-kräver en nyckel eller kontakt-e-post den saknar inaktiveras automatiskt
-— se discovery_kallor.
+källa kan slås av/på oberoende via DISCOVERY_<KALLA>_AKTIV i .env; för
+Libris, Crossref, DataCite och arXiv styr det också om källans egna verktyg
+registreras. En källa som kräver en nyckel eller kontakt-e-post den saknar
+inaktiveras automatiskt — se discovery_kallor.
 
 arXivs användarvillkor (https://info.arxiv.org/help/api/tou.html) ber om
 erkännandet "Thank you to arXiv for use of its open access
@@ -87,6 +87,18 @@ mcp = MCPServer(
     version="0.1.0",
     cache_hints=CACHE_HINTAR,
 )
+
+
+def kallverktyg(kalla: str, **kwargs):
+    """Registrerar ett käll-specifikt verktyg bara om källan är aktiv.
+
+    DISCOVERY_<KALLA>_AKTIV=false tar bort källans egna verktyg ur
+    verktygslistan helt, i stället för att de finns kvar och svarar med ett
+    fel — en avstängd källa ska inte kosta klienten något. Samma läge styr
+    källans deltagande i discovery_sok (providers.PROVIDERS)."""
+    if providers.PROVIDERS[kalla]["aktiv"]:
+        return mcp.tool(**kwargs)
+    return lambda funktion: funktion
 
 
 # ===========================================================================
@@ -181,7 +193,7 @@ class DiscoveryCiteringarResultat(TypedDict):
 # Libris — Sveriges nationella bibliotekskatalog (KB)
 # ===========================================================================
 
-@mcp.tool(title="Sök i Libris", annotations=LASNING_EXTERN)
+@kallverktyg("libris", title="Sök i Libris", annotations=LASNING_EXTERN)
 def libris_sok(
     q: str = "",
     limit: int = 20,
@@ -243,7 +255,7 @@ def libris_sok(
         raise ToolError(str(exc)) from exc
 
 
-@mcp.tool(title="Läs en Libris-post", annotations=LASNING_EXTERN)
+@kallverktyg("libris", title="Läs en Libris-post", annotations=LASNING_EXTERN)
 def libris_hamta(libris_id: str, format: str = "kort") -> dict[str, Any]:
     """Läs en post i Libris via dess id.
 
@@ -264,7 +276,7 @@ def libris_hamta(libris_id: str, format: str = "kort") -> dict[str, Any]:
         raise ToolError(str(exc)) from exc
 
 
-@mcp.tool(title="Visa Libris-bestånd", annotations=LASNING_EXTERN)
+@kallverktyg("libris", title="Visa Libris-bestånd", annotations=LASNING_EXTERN)
 def libris_bestand(libris_id: str, limit: int = 50) -> LibrisBestandResultat:
     """Visa vilka bibliotek som har ett verk (bestånd).
 
@@ -280,7 +292,7 @@ def libris_bestand(libris_id: str, limit: int = 50) -> LibrisBestandResultat:
         raise ToolError(str(exc)) from exc
 
 
-@mcp.tool(title="Slå upp Libris-term", annotations=LASNING_EXTERN)
+@kallverktyg("libris", title="Slå upp Libris-term", annotations=LASNING_EXTERN)
 def libris_sla_upp_term(q: str, typ: str = "", limit: int = 10) -> LibrisTermerResultat:
     """Slå upp länkade termer på id.kb.se för att bygga precisa filter.
 
@@ -306,7 +318,7 @@ def libris_sla_upp_term(q: str, typ: str = "", limit: int = 10) -> LibrisTermerR
 # Crossref — DOI:er för artiklar, böcker, konferensbidrag
 # ===========================================================================
 
-@mcp.tool(title="Sök i Crossref", annotations=LASNING_EXTERN)
+@kallverktyg("crossref", title="Sök i Crossref", annotations=LASNING_EXTERN)
 def cr_sok(
     q: str = "",
     limit: int = 20,
@@ -359,7 +371,7 @@ def cr_sok(
         raise ToolError(str(exc)) from exc
 
 
-@mcp.tool(title="Läs ett verk i Crossref", annotations=LASNING_EXTERN)
+@kallverktyg("crossref", title="Läs ett verk i Crossref", annotations=LASNING_EXTERN)
 def cr_hamta(doi: str, format: str = "kort") -> dict[str, Any]:
     """Läs ett verk i Crossref via dess DOI.
 
@@ -380,7 +392,7 @@ def cr_hamta(doi: str, format: str = "kort") -> dict[str, Any]:
 # DataCite — DOI:er för forskningsdata, programvara, preprints
 # ===========================================================================
 
-@mcp.tool(title="Sök i DataCite", annotations=LASNING_EXTERN)
+@kallverktyg("datacite", title="Sök i DataCite", annotations=LASNING_EXTERN)
 def dc_sok(
     q: str = "",
     limit: int = 20,
@@ -430,7 +442,7 @@ def dc_sok(
         raise ToolError(str(exc)) from exc
 
 
-@mcp.tool(title="Läs en post i DataCite", annotations=LASNING_EXTERN)
+@kallverktyg("datacite", title="Läs en post i DataCite", annotations=LASNING_EXTERN)
 def dc_hamta(doi: str, format: str = "kort") -> dict[str, Any]:
     """Läs en post i DataCite via dess DOI.
 
@@ -451,7 +463,7 @@ def dc_hamta(doi: str, format: str = "kort") -> dict[str, Any]:
 # arXiv — preprints inom fysik, matematik, datavetenskap m.fl.
 # ===========================================================================
 
-@mcp.tool(title="Sök på arXiv", annotations=LASNING_EXTERN)
+@kallverktyg("arxiv", title="Sök på arXiv", annotations=LASNING_EXTERN)
 def arxiv_sok(
     q: str = "",
     kategori: str = "",
@@ -504,7 +516,7 @@ def arxiv_sok(
         raise ToolError(str(exc)) from exc
 
 
-@mcp.tool(title="Läs en post på arXiv", annotations=LASNING_EXTERN)
+@kallverktyg("arxiv", title="Läs en post på arXiv", annotations=LASNING_EXTERN)
 def arxiv_hamta(arxiv_id: str, format: str = "kort") -> ArxivTraff:
     """Läs en preprint på arXiv via dess id.
 
@@ -588,7 +600,7 @@ def discovery_sok(
 def discovery_hamta(kalla: str, id: str) -> dict[str, Any]:
     """Läs en enskild post från en namngiven källa (se discovery_kallor).
 
-    kalla - källnamn, t.ex. "openalex", "crossref", "datacite", "arxiv".
+    kalla - källnamn, t.ex. "openalex", "crossref", "libris", "diva".
     id    - källans egna id eller DOI, beroende på källa (kalla_id/doi ur
             en tidigare discovery_sok-träff fungerar alltid).
 
