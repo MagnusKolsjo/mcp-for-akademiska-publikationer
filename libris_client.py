@@ -19,6 +19,8 @@ import re
 
 import requests
 
+from kallhjalp import kapa_text, ren_text
+
 # Libris uppmanar uttryckligen anropare att skicka en beskrivande
 # User-Agent. Den identifierar trafiken för KB och kan kontaktas vid
 # problem — sätt en egen via miljövariabeln i drift.
@@ -186,6 +188,13 @@ def _forma_traff(item: dict) -> dict:
         if isinstance(s, dict) and s.get("code")
     ]
 
+    # Sammanfattningen ligger oftast på instansen, ibland på verket.
+    sammanfattning = next(
+        (ren_text(_etikett(s)) for s in _som_lista(item.get("summary")) + _som_lista(verk.get("summary"))
+         if _etikett(s)),
+        None,
+    )
+
     return {
         "libris_id": post_id,
         "uri": uri,
@@ -197,6 +206,7 @@ def _forma_traff(item: dict) -> dict:
         "sprak": sprak,
         "identifierare": identifierare,
         "amnen": amnen,
+        "sammanfattning": sammanfattning,
     }
 
 

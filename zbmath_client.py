@@ -17,7 +17,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
 
 BASE_URL = os.environ.get("ZBMATH_BASE_URL", "https://api.zbmath.org/v1").rstrip("/")
 USER_AGENT = kallkonfig.user_agent("ZBMATH_USER_AGENT")
@@ -62,6 +62,19 @@ def _doi(lankar: list | None) -> str | None:
     return None
 
 
+# zbMATH Open visar den här platshållaren i stället för texten när
+# recensionens licens inte tillåter vidarespridning.
+_EJ_TILLGANGLIG = "contents unavailable due to conflicting licenses"
+
+
+def _sammanfattning(post: dict) -> str | None:
+    for bidrag in post.get("editorial_contributions") or []:
+        text = (bidrag or {}).get("text") if isinstance(bidrag, dict) else None
+        if text and _EJ_TILLGANGLIG not in text:
+            return ren_text(text)
+    return None
+
+
 def _forma(post: dict) -> dict:
     titel_obj = post.get("title") or {}
     forfattare = [
@@ -83,6 +96,7 @@ def _forma(post: dict) -> dict:
         "typ": typ,
         "url": post.get("zbmath_url"),
         "oa_lank": None,
+        "sammanfattning": _sammanfattning(post),
     }
 
 

@@ -28,7 +28,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
 
 BASE_URL = os.environ.get("DIVA_BASE_URL", "https://www.diva-portal.org/smash/export.jsf")
 # DiVA:s WAF blockerar (403) User-Agent-strängar som *börjar* med "Discovery"
@@ -57,6 +57,7 @@ _KOLUMN_ALIAS: dict[str, list[str]] = {
     "ar": ["year", "år"],
     "doi": ["doi"],
     "urn": ["nbn", "urn:nbn", "urn", "uri"],
+    "sammanfattning": ["abstract", "sammanfattning"],
     "fulltext_url": ["fulltextlink", "länk till fulltext", "fulltext url", "link to fulltext"],
     "fri_fulltext": ["freefulltext", "fri fulltext", "free fulltext", "open access"],
 }
@@ -159,6 +160,7 @@ def _forma_rad(rad: dict, rubrikindex: dict) -> dict | None:
         "typ": _val(rad, rubrikindex, "publikationstyp") or None,
         "url": url,
         "oa_lank": fulltext_url or (url if fri_fulltext else None),
+        "sammanfattning": ren_text(_val(rad, rubrikindex, "sammanfattning")),
     }
 
 

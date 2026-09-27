@@ -10,12 +10,14 @@ källorna sätts ihop av — se respektive <namn>_client.py för fält och
 frågespråk.
 
 De äldre klientmodulerna (libris_client.py, crossref_client.py,
-datacite_client.py, arxiv_client.py) använder inte den här modulen; de
-behålls oförändrade och har varsitt eget, inline mönster sedan tidigare.
+datacite_client.py, arxiv_client.py) har varsitt eget HTTP-mönster sedan
+tidigare men delar textstädningen (ren_text, kapa_text) med övriga.
 """
 
 from __future__ import annotations
 
+import html
+import re
 import threading
 import time
 from typing import Callable
@@ -63,3 +65,38 @@ def kapa_lista(lista: list, max_antal: int) -> list:
     if max_antal <= 0:
         return []
     return lista[:max_antal]
+
+
+def ren_text(text) -> str | None:
+    """HTML/JATS-taggar och teckenentiteter bort, blanksteg normaliserade.
+
+    Källorna levererar abstract omväxlande som ren text, HTML (<p>, <i>)
+    och JATS-XML (<jats:p>). Styckesgränser bevaras som radbrytningar så att
+    ett längre abstract går att läsa och citera stycke för stycke.
+    """
+    if not text:
+        return None
+    if isinstance(text, (list, tuple)):
+        text = next((t for t in text if t), None)
+        if not text:
+            return None
+    text = re.sub(r"</?(?:jats:)?p\b[^>]*>|<br\s*/?>", "\n", str(text))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    stycken = [" ".join(rad.split()) for rad in text.split("\n")]
+    return "\n".join(s for s in stycken if s) or None
+
+
+def kapa_text(text: str | None, max_tecken: int) -> tuple[str | None, bool]:
+    """Kapar vid närmaste ordgräns före max_tecken och markerar med "…".
+
+    Returnerar (text, kapad). max_tecken <= 0 betyder att texten utelämnas.
+    """
+    if not text:
+        return text, False
+    if max_tecken <= 0:
+        return None, True
+    if len(text) <= max_tecken:
+        return text, False
+    kapad = text[:max_tecken].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return kapad + "…", True

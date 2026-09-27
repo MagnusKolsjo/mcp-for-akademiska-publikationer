@@ -123,6 +123,7 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
 | `discovery_kallor` | Lista källor: aktiv-status, filterstöd, avstängningsskäl. |
 | `discovery_oa_lank` | Öppen tillgång-länk för en DOI (OpenAlex + Unpaywall). |
 | `discovery_citeringar` | Citeringsgraf för en post (OpenAlex + Semantic Scholar). |
+| `discovery_citera` | Färdig referens (APA, Harvard, IEEE … — alla CSL-stilar) eller BibTeX/RIS/CSL-JSON. |
 | `cr_sok` | Sök Crossref (artiklar m.m.), med fält- och årsfilter. |
 | `cr_hamta` | Läs ett verk i Crossref via DOI (kort eller full). |
 | `dc_sok` | Sök DataCite (forskningsdata m.m.), med typ-, års- och utgivarfilter. |
@@ -143,6 +144,19 @@ Bred sökning över alla aktiva källor:
 3. `discovery_hamta(kalla="openalex", id=doi)` → läs hela posten från den källa som gav bäst träff.
 4. `discovery_oa_lank(doi)` → hitta en öppet tillgänglig kopia.
 5. `discovery_citeringar(id=doi, riktning="citerande")` → vad citerar verket, och vad citeras av det.
+6. `discovery_citera(doi=doi, format="apa")` → färdig referens till rapporten; `format="bibtex"` eller `"ris"` för import i Zotero, EndNote m.fl.
+
+Träffarna i `discovery_sok` har abstractet kapat till 300 tecken
+(`sammanfattning_max`, 0 utelämnar det); `discovery_hamta` ger hela texten.
+Abstract finns hos de flesta källor, men inte hos EconBiz, och bara för en
+mindre del av Crossrefs och Libris poster — förlagen och katalogisatörerna
+lämnar det inte alltid. Samma artikel hämtad via OpenAlex har det ofta.
+
+Referenser för poster med DOI formateras av doi.org ur förlagets egna
+metadata, och alla [CSL-stilar](https://github.com/citation-style-language/styles)
+fungerar. Poster utan DOI (t.ex. i Libris) formateras ur källans metadata:
+APA, Harvard, BibTeX, RIS och CSL-JSON. Kontrollera alltid en referens mot
+originalet innan den publiceras.
 
 Käll-specifik sökning:
 

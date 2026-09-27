@@ -33,6 +33,7 @@ Källor och verktyg:
     discovery_kallor    - lista alla källor: aktiva, filterstöd, avstängningsskäl
     discovery_oa_lank   - öppen tillgång-länk för en DOI (OpenAlex + Unpaywall)
     discovery_citeringar- citeringsgraf för en post (OpenAlex + Semantic Scholar)
+    discovery_citera    - färdig referens (APA, Harvard m.fl.) eller BibTeX/RIS
 
 Nya källor kopplas in via providers.py — se den modulen för mönstret. Varje
 källa kan slås av/på oberoende via DISCOVERY_<KALLA>_AKTIV i .env; för
@@ -67,6 +68,7 @@ import providers
 import svarscache
 from arxiv_client import ArxivFel
 from crossref_client import CrossrefFel
+from kallhjalp import DiscoveryKallaFel
 from datacite_client import DataCiteFel
 from libris_client import LibrisFel
 from mcp_annotationer import CACHE_HINTAR, LASNING_DB, LASNING_EXTERN
@@ -191,6 +193,13 @@ class DiscoveryOaLankResultat(TypedDict):
     doi: str
     kallor: dict[str, dict[str, Any]]
     oa_lank: str | None
+
+
+class DiscoveryCiteraResultat(TypedDict):
+    doi: str | None
+    format: str
+    referens: str
+    kalla: str
 
 
 class DiscoveryCiteringarResultat(TypedDict):
@@ -598,6 +607,7 @@ def discovery_sok(
     oppen_tillgang: bool | None = None,
     land: str = "",
     filter: dict[str, dict] | None = None,
+    sammanfattning_max: int = 300,
 ) -> DiscoverySokResultat:
     """Sök flera källor samtidigt och få sammanslagna, deduplicerade träffar.
 
@@ -621,9 +631,14 @@ def discovery_sok(
       land            - ISO-landskod för författarnas institutioner, t.ex.
                         "SE". Stöds som ovan bara av vissa källor.
       filter          - källspecifika råfilter: {"openalex": {"topics.id": "..."}}.
+      sammanfattning_max - max antal tecken abstract per träff (standard 300);
+                        0 utelämnar abstracten helt och ger kortast svar.
 
     Varje träff har fälten: kalla, kalla_id, doi, titel, forfattare, ar, typ,
-    url, oa_lank, citeringar samt hittad_i (alla källor som hittade posten).
+    url, oa_lank, citeringar, sammanfattning (abstract, kapat — markerat med
+    "…" och sammanfattning_kapad=true; hela texten ges av discovery_hamta)
+    samt hittad_i (alla källor som hittade posten). Källor som saknar
+    abstract (t.ex. EconBiz och de flesta Libris-poster) ger null.
     Resultatet rangordnas efter relevans: varje källas egen ordning vägs
     samman, och en post som flera källor hittar rankas högre. En källa
     som fallerar eller svarar för långsamt stoppar inte de andra — dess fel
@@ -640,6 +655,7 @@ def discovery_sok(
             oppen_tillgang=oppen_tillgang,
             land=land or None,
             filter=filter,
+            sammanfattning_max=sammanfattning_max,
         )
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
@@ -653,7 +669,8 @@ def discovery_hamta(kalla: str, id: str) -> dict[str, Any]:
     id    - källans egna id eller DOI, beroende på källa (kalla_id/doi ur
             en tidigare discovery_sok-träff fungerar alltid).
 
-    Returnerar samma gemensamma träffschema som discovery_sok. En okänd
+    Returnerar samma gemensamma träffschema som discovery_sok, med hela
+    abstractet i sammanfattning (okapat). En okänd
     källa, en avstängd källa eller ett okänt id ger ett begripligt fel.
     """
     try:
@@ -721,6 +738,45 @@ def discovery_citeringar(id: str, riktning: str = "citerande", limit: int = 20) 
     try:
         return providers.citeringar(id, riktning=riktning, limit=limit)
     except ValueError as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool(title="Formatera en referens", annotations=LASNING_EXTERN)
+def discovery_citera(
+    doi: str = "",
+    kalla: str = "",
+    id: str = "",
+    format: str = "apa",
+    sprak: str = "sv-SE",
+) -> DiscoveryCiteraResultat:
+    """Ger en färdig referens för en post, för rapporter och presentationer.
+
+    Ange doi, eller kalla + id ur en discovery_sok-träff (kalla/kalla_id).
+
+    format - en citeringsstil: "apa" (standard), "harvard-cite-them-right",
+             "chicago-author-date", "ieee", "vancouver",
+             "modern-language-association" eller något annat CSL-stilnamn;
+             eller ett maskinläsbart format för referenshanterare:
+             "bibtex", "ris", "csl-json".
+    sprak  - språk för stilens fasta ord (t.ex. "m.fl.", "Tillgänglig vid"),
+             "sv-SE" som standard, "en-GB"/"en-US" för engelska.
+
+    Har posten en DOI formaterar doi.org referensen ur förlagets egna
+    metadata, och alla CSL-stilar fungerar. Saknar posten DOI (t.ex. en
+    Libris-post) formateras den ur källans metadata; då stöds apa, harvard,
+    bibtex, ris och csl-json. Fältet "kalla" visar vilken väg som användes.
+    Kontrollera alltid en referens mot originalet innan den publiceras —
+    metadata hos källan kan vara ofullständig.
+    """
+    try:
+        return providers.citera(
+            doi=doi or None, kalla=kalla or None, id_=id or None, format=format, sprak=sprak,
+        )
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
+    except DiscoveryKallaFel as exc:
+        raise ToolError(str(exc)) from exc
+    except tuple(p["fel"] for p in providers.PROVIDERS.values()) as exc:
         raise ToolError(str(exc)) from exc
 
 

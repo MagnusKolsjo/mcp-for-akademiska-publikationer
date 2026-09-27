@@ -6,6 +6,21 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
 ## [Unreleased]
 
 ### Tillagt
+- Abstract (`sammanfattning`) i det gemensamma träffschemat, hämtat från
+  alla källor som har det: OpenAlex (återskapat ur `abstract_inverted_index`),
+  Crossref, DataCite, arXiv, Libris, SwePub, DiVA, Publicera, NVA, OSF,
+  Europe PMC (nu `resultType=core`), zbMATH Open (recensionstexten), HAL,
+  DOAJ och CORE. `discovery_sok` kapar det till `sammanfattning_max` tecken
+  (standard 300, markerat med "…" och `sammanfattning_kapad`);
+  `discovery_hamta` ger hela texten. `cr_sok`/`dc_sok` och kort form av
+  `cr_hamta`/`dc_hamta` visar det kapat till 500 tecken, som `arxiv_sok`.
+- `discovery_citera`: färdig referens för rapporter och presentationer —
+  alla CSL-stilar (APA, Harvard, IEEE, Vancouver, Chicago m.fl.) på valfritt
+  språk, eller BibTeX/RIS/CSL-JSON. Poster med DOI formateras av doi.org
+  ur förlagets metadata; poster utan DOI formateras ur källans metadata
+  (APA, Harvard, BibTeX, RIS, CSL-JSON). Ny modul `citering.py`.
+- `kallhjalp.ren_text`/`kapa_text`: gemensam städning av HTML/JATS i
+  abstract och synlig kapning vid ordgräns.
 - Svarscache (`svarscache.py`, `db.py`): källornas svar sparas i
   PostgreSQL eller SQLite, valt med `DATABASE_URL` — sökningar i 6 timmar,
   enskilda poster i 7 dagar (`DISCOVERY_CACHE_SOK_TIMMAR`,

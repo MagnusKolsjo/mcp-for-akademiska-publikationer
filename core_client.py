@@ -18,7 +18,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
 
 BASE_URL = os.environ.get("CORE_BASE_URL", "https://api.core.ac.uk/v3").rstrip("/")
 USER_AGENT = kallkonfig.user_agent("CORE_USER_AGENT")
@@ -79,6 +79,7 @@ def _forma(post: dict) -> dict:
         "url": oa_lank or (f"https://doi.org/{post['doi']}" if post.get("doi") else None),
         "oa_lank": oa_lank or None,
         "citeringar": post.get("citationCount"),
+        "sammanfattning": ren_text(post.get("abstract")),
     }
 
 

@@ -17,7 +17,7 @@ import urllib.parse
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
 
 BASE_URL = os.environ.get("DOAJ_BASE_URL", "https://doaj.org/api").rstrip("/")
 USER_AGENT = kallkonfig.user_agent("DOAJ_USER_AGENT")
@@ -86,6 +86,7 @@ def _forma(post: dict) -> dict:
         # DOAJ indexerar bara open access-tidskrifter — fulltextlänken är
         # alltså alltid en öppen kopia, inte bara en landningssida.
         "oa_lank": url,
+        "sammanfattning": ren_text(bibjson.get("abstract")),
     }
 
 

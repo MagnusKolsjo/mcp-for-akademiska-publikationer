@@ -38,6 +38,7 @@ import re
 import time
 
 import arxiv_client
+import citering
 import crossref_client
 import datacite_client
 import core_client
@@ -57,7 +58,7 @@ import svarscache
 import swepub_client
 import unpaywall_client
 import zbmath_client
-from kallhjalp import DiscoveryKallaFel
+from kallhjalp import DiscoveryKallaFel, kapa_text
 
 # En källas anrop i discovery_sok får högst så här lång tid, oavsett dess
 # egen strypningstakt — annars kan en enda långsam eller nedgången källa
@@ -118,6 +119,7 @@ def _till_enhetligt(traff: dict) -> dict:
         "url": traff.get("url"),
         "oa_lank": traff.get("oa_lank") or traff.get("url_pdf"),
         "citeringar": traff.get("citeringar"),
+        "sammanfattning": traff.get("sammanfattning"),
     }
 
 
@@ -152,6 +154,7 @@ def _arxiv_normaliserad(traff: dict) -> dict:
         "url": traff.get("url_abs"),
         "oa_lank": traff.get("url_pdf"),
         "citeringar": None,
+        "sammanfattning": traff.get("sammanfattning"),
     }
 
 
@@ -194,7 +197,7 @@ def _arxiv_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
 
 
 def _arxiv_hamta(id_: str) -> dict:
-    return _arxiv_normaliserad(arxiv_client.hamta(id_, format="kort"))
+    return _arxiv_normaliserad(arxiv_client.hamta(id_, format="full"))
 
 
 def _doi_kalla_sok(client, *, kalla_namn):
@@ -210,7 +213,9 @@ def _doi_kalla_sok(client, *, kalla_namn):
 
 def _doi_kalla_hamta(client):
     def _hamta(id_: str) -> dict:
-        return _till_enhetligt(client.hamta(id_, format="kort"))
+        # "full" för att få hela abstractet; _till_enhetligt plockar sedan
+        # bara det gemensamma schemats fält.
+        return _till_enhetligt(client.hamta(id_, format="full"))
 
     return _hamta
 
@@ -235,6 +240,7 @@ def _libris_normaliserad(traff: dict) -> dict:
         "url": traff.get("uri"),
         "oa_lank": None,
         "citeringar": None,
+        "sammanfattning": traff.get("sammanfattning"),
     }
 
 
@@ -584,6 +590,7 @@ def sok_alla(
     oppen_tillgang: bool | None = None,
     land: str | None = None,
     filter: dict[str, dict] | None = None,
+    sammanfattning_max: int = 300,
 ) -> dict:
     """Slår mot flera källor parallellt och slår ihop de normaliserade träffarna.
 
@@ -596,6 +603,9 @@ def sok_alla(
     oppen_tillgang  - filtrera på öppen tillgång (stöds inte av alla källor).
     land            - ISO-landskod för författarnas institutioner (samma).
     filter          - källspecifika råfilter: {"openalex": {...}, ...}.
+    sammanfattning_max - abstractet i varje träff kapas till så många tecken
+                      (markerat med "…" och sammanfattning_kapad=True);
+                      0 utelämnar det. discovery_hamta ger hela texten.
 
     Varje källa frågas i en egen tråd med en gemensam tidsgräns
     (_PER_KALLA_TIDSGRANS_S) — en långsam eller nedgången källa fördröjer
@@ -668,6 +678,11 @@ def sok_alla(
     # Ordning i valda-listan, inte i färdigordning — annars styr svarstiden
     # vilken källas fält som vinner vid sammanslagning.
     deduplicerade = _sla_ihop_och_rangordna([(namn, listor[namn]) for namn in valda if namn in listor])
+
+    # Kapningen sker efter sammanslagningen, så att en dubblett med längre
+    # abstract hos en annan källa inte förlorar texten i förväg.
+    for t in deduplicerade:
+        t["sammanfattning"], t["sammanfattning_kapad"] = kapa_text(t.get("sammanfattning"), sammanfattning_max)
 
     resultat = {
         "fraga": q,
@@ -805,3 +820,39 @@ def citeringar(id_eller_doi: str, *, riktning: str = "citerande", limit: int = 2
         raise ValueError("Ingen citeringskälla är aktiv (OpenAlex och Semantic Scholar är avstängda).")
 
     return resultat
+
+
+def citera(
+    *,
+    doi: str | None = None,
+    kalla: str | None = None,
+    id_: str | None = None,
+    format: str = "apa",
+    sprak: str = "sv-SE",
+) -> dict:
+    """Formaterad referens för en post, via DOI eller via (kalla, id).
+
+    Har posten en DOI formateras referensen av doi.org (se citering.py);
+    annars ur postens egna metadata. Används av mcp_server.discovery_citera.
+    """
+    post = None
+    doi = normalisera_doi(doi)
+    if not doi:
+        if not (kalla and id_):
+            raise ValueError("Ange doi, eller både kalla och id.")
+        post = hamta_fran_kalla(kalla, id_)
+        doi = post.get("doi")
+
+    if doi:
+        referens, _ = svarscache.hamta_eller_kor(
+            "doi.org", svarscache.POST, {"doi": doi, "format": format, "sprak": sprak},
+            lambda: citering.via_doi(doi, format=format, sprak=sprak),
+        )
+        return {"doi": doi, "format": format, "referens": referens, "kalla": "doi.org"}
+
+    return {
+        "doi": None,
+        "format": format,
+        "referens": citering.ur_post(post, format=format),
+        "kalla": f"{kalla} (postens egna metadata)",
+    }

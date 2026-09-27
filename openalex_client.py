@@ -37,7 +37,7 @@ KALLA = "openalex"
 # sänker inte kvaliteten på normaliseringen.
 _SELECT = (
     "id,doi,title,display_name,publication_year,type,authorships,"
-    "primary_location,open_access,cited_by_count"
+    "primary_location,open_access,cited_by_count,abstract_inverted_index"
 )
 
 
@@ -143,6 +143,20 @@ def _oa_lank(open_access: dict, primary_location: dict) -> str | None:
     return (open_access or {}).get("oa_url") or (primary_location or {}).get("pdf_url")
 
 
+def _abstract(inverterat: dict | None) -> str | None:
+    """Återskapar abstractet ur OpenAlex inverterade index {ord: [positioner]}.
+
+    OpenAlex lämnar av upphovsrättsskäl aldrig abstractet som löptext, bara
+    som index; ordföljden återskapas exakt ur positionerna."""
+    if not inverterat:
+        return None
+    ord_pa_plats: dict[int, str] = {}
+    for ord_, platser in inverterat.items():
+        for plats in platser:
+            ord_pa_plats[plats] = ord_
+    return " ".join(ord_pa_plats[i] for i in sorted(ord_pa_plats)) or None
+
+
 def _forma(item: dict) -> dict:
     """Formar ett OpenAlex-verk till discoveryhubbens gemensamma träffschema."""
     primary = item.get("primary_location") or {}
@@ -159,6 +173,7 @@ def _forma(item: dict) -> dict:
         "url": primary.get("landing_page_url") or (f"https://doi.org/{doi}" if doi else None),
         "oa_lank": _oa_lank(oa, primary),
         "citeringar": item.get("cited_by_count"),
+        "sammanfattning": _abstract(item.get("abstract_inverted_index")),
     }
 
 

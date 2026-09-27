@@ -15,7 +15,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
 
 BASE_URL = os.environ.get(
     "EUROPEPMC_BASE_URL", "https://www.ebi.ac.uk/europepmc/webservices/rest"
@@ -81,6 +81,7 @@ def _forma(post: dict) -> dict:
         if post.get("source") and post.get("id") else None,
         "oa_lank": _oa_lank(post),
         "citeringar": post.get("citedByCount"),
+        "sammanfattning": ren_text(post.get("abstractText")),
     }
 
 
@@ -112,7 +113,8 @@ def sok(
     params = {
         "query": fraga,
         "format": "json",
-        "resultType": "lite",
+        # "core" i stället för "lite": bara core innehåller abstractText.
+        "resultType": "core",
         "pageSize": str(max(1, min(limit, 1000))),
     }
     data = _hamta(params)

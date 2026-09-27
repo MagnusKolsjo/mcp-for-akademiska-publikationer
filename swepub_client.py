@@ -22,7 +22,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
 
 BASE_URL = os.environ.get("SWEPUB_BASE_URL", "https://libris.kb.se/xsearch").rstrip("/")
 USER_AGENT = kallkonfig.user_agent("SWEPUB_USER_AGENT")
@@ -70,6 +70,7 @@ def _forma(post: dict) -> dict:
         "typ": post.get("type"),
         "url": post.get("identifier"),
         "oa_lank": None,
+        "sammanfattning": ren_text(post.get("description")),
     }
 
 

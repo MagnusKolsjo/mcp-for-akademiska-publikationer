@@ -26,6 +26,8 @@ import re
 
 import requests
 
+from kallhjalp import kapa_text, ren_text
+
 BASE_URL = os.environ.get("CROSSREF_BASE_URL", "https://api.crossref.org").rstrip("/")
 # E-post som lägger anropen i Crossrefs polite pool. Lämnas tom om man inte
 # vill identifiera sig — då hamnar trafiken i den anonyma poolen.
@@ -141,13 +143,13 @@ def _forfattare(item: dict) -> list:
     return personer
 
 
+# Samma gräns som arXiv-klientens kapade sammanfattning.
+KORT_SAMMANFATTNING_MAX = 500
+
+
 def _avkoda_abstract(rad: str | None) -> str | None:
     """Strippar JATS-XML-taggarna ur ett Crossref-abstract till ren text."""
-    if not rad:
-        return None
-    text = re.sub(r"<[^>]+>", " ", rad)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text or None
+    return ren_text(rad)
 
 
 def _forma_traff(item: dict) -> dict:
@@ -163,6 +165,8 @@ def _forma_traff(item: dict) -> dict:
         "container": _forsta(item.get("container-title")),
         "url": item.get("URL") or (f"https://doi.org/{item['DOI']}" if item.get("DOI") else None),
         "citeringar": item.get("is-referenced-by-count"),
+        # Kapad i sökträffar och kort form; format="full" ger hela texten.
+        "sammanfattning": kapa_text(_avkoda_abstract(item.get("abstract")), KORT_SAMMANFATTNING_MAX)[0],
     }
 
 

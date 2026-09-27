@@ -22,6 +22,8 @@ import re
 
 import requests
 
+from kallhjalp import kapa_text, ren_text
+
 BASE_URL = os.environ.get("DATACITE_BASE_URL", "https://api.datacite.org").rstrip("/")
 USER_AGENT = os.environ.get(
     "DATACITE_USER_AGENT",
@@ -152,7 +154,13 @@ def _forma_traff(item: dict) -> dict:
         "container": _container_titel(attr),
         "url": attr.get("url") or (f"https://doi.org/{doi}" if doi else None),
         "citeringar": attr.get("citationCount"),
+        # Kapad i sökträffar och kort form; format="full" ger hela texten.
+        "sammanfattning": kapa_text(_avkoda_sammanfattning(attr), KORT_SAMMANFATTNING_MAX)[0],
     }
+
+
+# Samma gräns som arXiv-klientens kapade sammanfattning.
+KORT_SAMMANFATTNING_MAX = 500
 
 
 def _avkoda_sammanfattning(attr: dict):
@@ -160,11 +168,11 @@ def _avkoda_sammanfattning(attr: dict):
     beskrivningar = attr.get("descriptions", []) or []
     for d in beskrivningar:
         if isinstance(d, dict) and d.get("descriptionType") == "Abstract" and d.get("description"):
-            return d["description"].strip()
+            return ren_text(d["description"])
     # Faller tillbaka på första beskrivningen oavsett typ.
     for d in beskrivningar:
         if isinstance(d, dict) and d.get("description"):
-            return d["description"].strip()
+            return ren_text(d["description"])
     return None
 
 
