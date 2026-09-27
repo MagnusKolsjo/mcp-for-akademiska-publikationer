@@ -6,6 +6,20 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
 ## [Unreleased]
 
 ### Tillagt
+- Arbetsbibliotek (`bibliotek.py`, `fulltext.py`): `discovery_spara`,
+  `discovery_sok_i_bibliotek`, `discovery_las`, `discovery_lista_bibliotek`
+  och `discovery_ta_bort_ur_bibliotek`. Sparade poster får metadata, helt
+  abstract, APA-referens och fulltext i numrerade stycken med
+  teckenpositioner och sidnummer, märkta med projekt. Fulltext från arXiv,
+  Europe PMC (JATS), DiVA, Publicera och öppna kopior via OpenAlex/Unpaywall.
+  Hybridsökning (ord + embeddings med `intfloat/multilingual-e5-base`,
+  sammanvägda med reciprocal rank fusion) i PostgreSQL (pgvector) eller
+  SQLite (FTS5 + sqlite-vec). `DISCOVERY_BIBLIOTEK_AKTIV` och
+  `DISCOVERY_BIBLIOTEK_SEMANTISK` styr funktionen; tunga paket laddas bara
+  vid användning (`requirements-bibliotek.txt`). Över http visas texter
+  utan öppen licens bara som utdrag.
+- Schemat flyttat till `db/schema_postgres.sql` och `db/schema_sqlite.sql`
+  (plus `db/vektor_*.sql`), eftersom det vuxit förbi inline-storlek.
 - Flerspråkig sökning och begreppsexpansion: `discovery_sok` väljer språk
   efter frågans språk, ämne och land (`orkestrering.expansionssprak`) och
   redovisar valet, saknade språk och täckningsvarningar under

@@ -109,4 +109,11 @@ def hamta(doi: str) -> dict:
         "oa_lank": bast.get("url_for_pdf") or bast.get("url"),
         "is_oa": data.get("is_oa"),
         "oa_status": data.get("oa_status"),
+        # Alla öppna kopior, bästa först, med licens — arbetsbiblioteket
+        # prövar dem i tur och ordning tills en ger fulltext.
+        "oa_platser": [
+            {"url": plats.get("url_for_pdf") or plats.get("url"), "licens": plats.get("license")}
+            for plats in [bast, *(data.get("oa_locations") or [])]
+            if plats and (plats.get("url_for_pdf") or plats.get("url"))
+        ],
     }

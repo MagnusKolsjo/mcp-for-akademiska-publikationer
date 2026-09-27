@@ -257,6 +257,23 @@ def hamta(id_eller_doi: str) -> dict:
     return _forma(data)
 
 
+def oa_platser(doi: str) -> list[dict]:
+    """Öppna kopior av ett verk, bästa först: [{"url", "licens"}].
+
+    PDF-adressen går före landningssidan; en landningssida följs av
+    arbetsbiblioteket bara via citation_pdf_url (se fulltext.py)."""
+    naken = (doi or "").strip().split("doi.org/")[-1].removeprefix("doi:")
+    data = _hamta(f"/works/doi:{naken}", {"select": "best_oa_location,locations"})
+    ut = []
+    for plats in [data.get("best_oa_location"), *(data.get("locations") or [])]:
+        if not plats or not plats.get("is_oa"):
+            continue
+        for url in (plats.get("pdf_url"), plats.get("landing_page_url")):
+            if url:
+                ut.append({"url": url, "licens": plats.get("license")})
+    return ut
+
+
 def citeringar(id_eller_doi: str, *, riktning: str = "citerande", limit: int = 20) -> dict:
     """Citeringsgrafen runt ett verk.
 

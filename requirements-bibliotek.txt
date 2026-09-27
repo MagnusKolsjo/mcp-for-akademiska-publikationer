@@ -1,0 +1,11 @@
+# Arbetsbiblioteket (DISCOVERY_BIBLIOTEK_AKTIV=true). Behövs inte för en
+# lättviktig Discovery utan bibliotek: paketen importeras bara när
+# biblioteket används.
+
+# Textextraktion ur PDF
+pymupdf>=1.24
+
+# Semantisk sökning (DISCOVERY_BIBLIOTEK_SEMANTISK=true)
+sentence-transformers>=3.0
+# Vektorsökning i SQLite; i Postgres används tillägget pgvector i databasen
+sqlite-vec>=0.1.6

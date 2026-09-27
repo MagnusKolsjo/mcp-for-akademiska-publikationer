@@ -3,8 +3,9 @@
 """Databasåtkomst för discovery: PostgreSQL eller SQLite, valt via DATABASE_URL.
 
 Databasen är frivillig. Utan DATABASE_URL fungerar alla sökverktyg precis
-som förut, bara utan svarscache; discovery_kallor visar varför cachen är
-avstängd. `postgresql://` och `sqlite:///` är likvärdiga val — Postgres
+som förut, bara utan svarscache och arbetsbibliotek; discovery_kallor visar
+varför. Schemat ligger i db/schema_*.sql och vektortabellen för
+bibliotekets semantiska sökning i db/vektor_*.sql. `postgresql://` och `sqlite:///` är likvärdiga val — Postgres
 passar när databasen ändå delas med andra MCP-servrar, SQLite när en lokal
 fil räcker.
 
@@ -19,6 +20,7 @@ import contextlib
 import logging
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -56,8 +58,11 @@ def _sqlite_sokvag() -> Path:
 
 
 @contextlib.contextmanager
-def hamta_db():
+def hamta_db(*, vektor: bool = False):
     """Öppnar en anslutning, committar vid lyckat block och stänger alltid.
+
+    vektor=True laddar sqlite-vec i SQLite-anslutningen (bibliotekets
+    semantiska sökning); Postgres har pgvector som tillägg i databasen.
 
     (sqlite3:s och psycopg2:s egna `with conn` committar men stänger inte —
     därför en egen kontexthanterare.)
@@ -74,6 +79,14 @@ def hamta_db():
     else:
         # timeout: väntan på skrivlås när flera trådar skriver samtidigt.
         conn = sqlite3.connect(_sqlite_sokvag(), timeout=10)
+        # SQLite följer främmande nycklar (ON DELETE CASCADE) bara om det
+        # slås på, och det gäller per anslutning.
+        conn.execute("PRAGMA foreign_keys=ON")
+        if vektor:
+            import sqlite_vec
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
     try:
         yield conn
         conn.commit()
@@ -82,6 +95,10 @@ def hamta_db():
         raise
     finally:
         conn.close()
+
+
+def ar_postgres() -> bool:
+    return _ar_postgres()
 
 
 def ph() -> str:
@@ -94,29 +111,43 @@ def prefix() -> str:
     return "discovery." if _ar_postgres() else ""
 
 
-def initiera_schema() -> None:
-    """Skapar schema, tabeller och index om de inte redan finns (idempotent)."""
-    with hamta_db() as conn:
-        cur = conn.cursor()
+_SQL_KATALOG = Path(__file__).parent / "db"
+_schema_las = threading.Lock()
+_schema_klart = False
+
+
+def _kor_sqlfil(namn: str, *, vektor: bool = False) -> None:
+    sql = (_SQL_KATALOG / namn).read_text(encoding="utf-8")
+    with hamta_db(vektor=vektor) as conn:
         if _ar_postgres():
-            cur.execute("CREATE SCHEMA IF NOT EXISTS discovery")
+            conn.cursor().execute(sql)
         else:
+            conn.executescript(sql)
+
+
+def initiera_schema() -> None:
+    """Skapar schema, tabeller och index om de inte redan finns (idempotent).
+
+    Körs en gång per process, första gången svarscachen eller biblioteket
+    behöver databasen — inte vid import, så att en nedstängd databas inte
+    hindrar servern från att starta."""
+    global _schema_klart
+    if _schema_klart:
+        return
+    with _schema_las:
+        if _schema_klart:
+            return
+        if not _ar_postgres():
             # WAL låter läsare och en skrivare arbeta samtidigt — discovery_sok
             # skriver cacheposter från flera trådar på en gång.
-            cur.execute("PRAGMA journal_mode=WAL")
-        # skapad/giltig_till är Unix-tid i sekunder: samma typ och jämförelse
-        # i båda backenderna, utan datumadaptrar.
-        cur.execute(f"""
-            CREATE TABLE IF NOT EXISTS {prefix()}svarscache (
-                nyckel TEXT PRIMARY KEY,
-                kalla TEXT NOT NULL,
-                operation TEXT NOT NULL,
-                svar TEXT NOT NULL,
-                skapad DOUBLE PRECISION NOT NULL,
-                giltig_till DOUBLE PRECISION NOT NULL
-            )
-        """)
-        cur.execute(f"""
-            CREATE INDEX IF NOT EXISTS svarscache_giltig_till_idx
-            ON {prefix()}svarscache (giltig_till)
-        """)
+            with hamta_db() as conn:
+                conn.execute("PRAGMA journal_mode=WAL")
+        _kor_sqlfil("schema_postgres.sql" if _ar_postgres() else "schema_sqlite.sql")
+        _schema_klart = True
+
+
+def initiera_vektor() -> None:
+    """Skapar vektortabellen för semantisk sökning (idempotent). Kastar om
+    pgvector eller sqlite-vec saknas — anroparen avgör vad det betyder."""
+    initiera_schema()
+    _kor_sqlfil("vektor_postgres.sql" if _ar_postgres() else "vektor_sqlite.sql", vektor=True)

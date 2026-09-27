@@ -35,6 +35,12 @@ Källor och verktyg:
     discovery_citeringar- citeringsgraf för en post (OpenAlex + Semantic Scholar)
     discovery_citera    - färdig referens (APA, Harvard m.fl.) eller BibTeX/RIS
     discovery_expandera - vilka språk en fråga bör sökas på, och varianterna
+  Arbetsbibliotek (bibliotek.py; bara med DISCOVERY_BIBLIOTEK_AKTIV och DATABASE_URL)
+    discovery_spara     - spara en post med abstract, referens och fulltext i stycken
+    discovery_sok_i_bibliotek - ord- och semantisk sökning i sparad fulltext
+    discovery_las       - läs ett stycke eller fulltexten, för citat
+    discovery_lista_bibliotek - sparade poster och projekt
+    discovery_ta_bort_ur_bibliotek - ta bort ur ett projekt eller helt
 
 Nya källor kopplas in via providers.py — se den modulen för mönstret. Varje
 källa kan slås av/på oberoende via DISCOVERY_<KALLA>_AKTIV i .env; för
@@ -62,6 +68,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 import arxiv_client
+import bibliotek
 import crossref_client
 import datacite_client
 import libris_client
@@ -72,7 +79,7 @@ from crossref_client import CrossrefFel
 from kallhjalp import DiscoveryKallaFel
 from datacite_client import DataCiteFel
 from libris_client import LibrisFel
-from mcp_annotationer import CACHE_HINTAR, LASNING_DB, LASNING_EXTERN
+from mcp_annotationer import CACHE_HINTAR, LASNING_DB, LASNING_EXTERN, SKRIVNING_DESTRUKTIV, SYNK
 from mcp_transport import starta
 
 mcp = MCPServer(
@@ -180,6 +187,7 @@ class DiscoveryKallorResultat(TypedDict):
     berikningskallor: list[dict[str, Any]]
     svarscache: dict[str, Any]
     begreppsexpansion: dict[str, Any]
+    bibliotek: dict[str, Any]
     amnen: dict[str, str]
     typer: list[str]
 
@@ -874,6 +882,124 @@ def discovery_citera(
         raise ToolError(str(exc)) from exc
     except tuple(p["fel"] for p in providers.PROVIDERS.values()) as exc:
         raise ToolError(str(exc)) from exc
+
+
+# ===========================================================================
+# Arbetsbibliotek — registreras bara när biblioteket är påslaget och en
+# databas är konfigurerad (DISCOVERY_BIBLIOTEK_AKTIV, DATABASE_URL).
+# ===========================================================================
+
+def biblioteksverktyg(**kwargs):
+    if bibliotek.konfigurerat():
+        return mcp.tool(**kwargs)
+    return lambda funktion: funktion
+
+
+def _bibliotek(kor):
+    try:
+        return kor()
+    except (ValueError, bibliotek.BibliotekFel, DiscoveryKallaFel) as exc:
+        raise ToolError(str(exc)) from exc
+    except tuple(p["fel"] for p in providers.PROVIDERS.values()) as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@biblioteksverktyg(title="Spara i arbetsbiblioteket", annotations=SYNK)
+def discovery_spara(
+    kalla: str = "",
+    id: str = "",
+    doi: str = "",
+    projekt: str = "",
+    hamta_fulltext: bool = True,
+) -> dict[str, Any]:
+    """Sparar en publikation i arbetsbiblioteket för analys och citering.
+
+    Ange kalla + id ur en discovery_sok-träff (kalla/kalla_id), eller doi.
+
+    Sparar metadata, hela abstractet, en färdig APA-referens och — om en
+    öppen kopia finns — fulltexten, uppdelad i numrerade stycken med
+    teckenpositioner och sidnummer. Fulltexten söks hos källan (arXiv,
+    Europe PMC, DiVA, Publicera) och bland öppna kopior för DOI:n
+    (OpenAlex, Unpaywall). Hittas ingen står det i fulltext_status, med
+    försöken i fulltext_forsok.
+
+    projekt - valfri etikett (t.ex. rapportens namn) att gruppera poster
+              under; samma post kan höra till flera projekt.
+
+    Att spara samma post igen uppdaterar metadata och lägger till projektet,
+    men hämtar inte om en redan sparad fulltext.
+    """
+    return _bibliotek(lambda: providers.spara_i_bibliotek(
+        kalla=kalla or None, id_=id or None, doi=doi or None,
+        projekt=projekt or None, hamta_fulltext=hamta_fulltext,
+    ))
+
+
+@biblioteksverktyg(title="Sök i arbetsbiblioteket", annotations=LASNING_DB)
+def discovery_sok_i_bibliotek(
+    fraga: str,
+    projekt: str = "",
+    lage: str = "hybrid",
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Söker i fulltexten hos de publikationer som sparats i biblioteket.
+
+    lage  - "hybrid" (standard): ordsökning och semantisk sökning
+            sammanvägda; "fulltext": bara ord; "semantisk": bara betydelse
+            (hittar stycken som handlar om samma sak med andra ord, även
+            på andra språk).
+    projekt - begränsa till ett projekt.
+
+    Varje träff är ett stycke med post_id, stycke-nummer, sida och
+    teckenpositioner — adressen för ett citat. Läs omgivningen med
+    discovery_las(post_id, stycke=…, kontext=1) innan du citerar.
+    """
+    return _bibliotek(lambda: bibliotek.sok(fraga, projekt=projekt or None, lage=lage, limit=limit))
+
+
+@biblioteksverktyg(title="Läs en sparad publikation", annotations=LASNING_DB)
+def discovery_las(
+    post_id: str,
+    stycke: int = 0,
+    kontext: int = 0,
+    fran_tecken: int = 0,
+    max_tecken: int = 8000,
+) -> dict[str, Any]:
+    """Läser fulltexten i en sparad publikation.
+
+    Med stycke: det stycket (och kontext stycken före och efter) som
+    sammanhängande text. Annars: fulltexten från fran_tecken, högst
+    max_tecken tecken. Ett kapat svar har trunkerad=true och
+    fortsatt_fran_tecken; läs vidare därifrån.
+
+    CITAT: citera ordagrant bara ur text du läst här, aldrig ur en
+    sammanfattning eller ett kapat utdrag, och ange post, sida och
+    referens. begransad=true betyder att servern körs delat och att texten
+    saknar öppen licens — bara ett utdrag visas.
+    """
+    return _bibliotek(lambda: bibliotek.las(
+        post_id, stycke=stycke or None, kontext=max(0, kontext),
+        fran_tecken=fran_tecken, max_tecken=max_tecken,
+    ))
+
+
+@biblioteksverktyg(title="Lista arbetsbiblioteket", annotations=LASNING_DB)
+def discovery_lista_bibliotek(projekt: str = "") -> dict[str, Any]:
+    """Listar sparade publikationer (nyast först) och projekten med antal poster.
+
+    projekt - visa bara ett projekts poster.
+    """
+    return _bibliotek(lambda: bibliotek.lista(projekt or None))
+
+
+@biblioteksverktyg(title="Ta bort ur arbetsbiblioteket", annotations=SKRIVNING_DESTRUKTIV)
+def discovery_ta_bort_ur_bibliotek(post_id: str, projekt: str = "") -> dict[str, Any]:
+    """Tar bort en post ur ett projekt, eller helt ur biblioteket.
+
+    Med projekt tas bara kopplingen till projektet bort. Utan projekt
+    raderas posten med fulltext och stycken — det går inte att ångra.
+    """
+    return _bibliotek(lambda: bibliotek.ta_bort(post_id, projekt=projekt or None))
 
 
 if __name__ == "__main__":

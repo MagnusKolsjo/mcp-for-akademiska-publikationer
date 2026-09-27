@@ -20,8 +20,9 @@ sökningen. Det gör att `discovery_sok` kan slå mot flera källor samtidigt oc
 returnera en sammanslagen träfflista. Libris har ett eget, rikare frågespråk
 och egna verktyg, men deltar också i den enade sökningen.
 
-Nedladdning och lagring av fulltext ligger utanför den här servern — discovery
-hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
+Fulltext hämtas och lagras bara för publikationer som användaren sparar i
+arbetsbiblioteket (se nedan); sökverktygen själva lagrar ingenting utöver
+den tillfälliga svarscachen.
 
 ## Datakällor
 
@@ -132,6 +133,32 @@ Svaren till användaren ges på användarens språk; titlar, abstract och
 citat återges på originalspråket med översättning intill, och en
 översättning presenteras aldrig som citat (se serverns instruktioner).
 
+## Arbetsbibliotek
+
+Sökverktygen hittar och beskriver; biblioteket behåller. `discovery_spara`
+sparar en publikation med metadata, hela abstractet, en färdig
+APA-referens och — när en öppen kopia finns — fulltexten, uppdelad i
+numrerade stycken med teckenpositioner och sidnummer. Varje citat får
+därmed en adress (post, stycke, sida) som går att kontrollera i efterhand.
+
+- **Fulltext** hämtas från källan (arXiv-PDF, Europe PMC:s JATS-XML, DiVA:s
+  fulltextfil, Publiceras artikel-PDF) eller från öppna kopior för DOI:n
+  (OpenAlex, Unpaywall). Landningssidor följs bara via metataggen
+  `citation_pdf_url`. Skannade PDF:er utan textlager sparas inte som fulltext.
+- **Projekt:** poster kan märkas med ett eller flera projekt, t.ex. en
+  rapport.
+- **Sökning** (`discovery_sok_i_bibliotek`) kombinerar ordsökning med
+  semantisk sökning — en fråga på ett språk hittar stycken om samma sak på
+  ett annat. `discovery_las` läser ett stycke med omgivning eller
+  fulltexten från en position, med samma kapningsregler som övriga servrar.
+- **Konfiguration:** `DISCOVERY_BIBLIOTEK_AKTIV=false` ger en lättviktig
+  Discovery utan biblioteksverktyg och utan PDF- och embeddingpaket.
+  `DISCOVERY_BIBLIOTEK_SEMANTISK=false` behåller ordsökningen men slår av
+  embeddings. Kräver `DATABASE_URL` och paketen i `requirements-bibliotek.txt`.
+- **Delad drift:** körs servern över http visas texter utan öppen licens
+  (Creative Commons eller public domain) bara som utdrag. Lokalt är
+  biblioteket användarens eget.
+
 ## Svarscache
 
 Med `DATABASE_URL` satt sparas källornas svar i en databas: sökningar i 6
@@ -162,6 +189,8 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
    python3 -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
+   # Arbetsbiblioteket (valfritt):
+   pip install -r requirements-bibliotek.txt
    ```
 3. Kopiera `config.example.env` till `.env` och fyll i värdena. Sätt särskilt en
    egen `LIBRIS_USER_AGENT`, `DATACITE_USER_AGENT` och `ARXIV_USER_AGENT` med
@@ -192,6 +221,11 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
 | `discovery_kallor` | Lista källor: aktiv-status, filterstöd, avstängningsskäl. |
 | `discovery_oa_lank` | Öppen tillgång-länk för en DOI (OpenAlex + Unpaywall). |
 | `discovery_citeringar` | Citeringsgraf för en post (OpenAlex + Semantic Scholar). |
+| `discovery_spara` | Spara en post i arbetsbiblioteket: abstract, referens och fulltext i stycken. |
+| `discovery_sok_i_bibliotek` | Ord- och semantisk sökning i sparad fulltext. |
+| `discovery_las` | Läs ett stycke med omgivning, eller fulltexten från en position. |
+| `discovery_lista_bibliotek` | Sparade poster och projekt. |
+| `discovery_ta_bort_ur_bibliotek` | Ta bort en post ur ett projekt eller helt. |
 | `discovery_expandera` | Vilka språk en fråga bör sökas på, med skäl och täckningsvarningar; färdiga varianter om serverexpansionen är på. |
 | `discovery_citera` | Färdig referens (APA, Harvard, IEEE … — alla CSL-stilar) eller BibTeX/RIS/CSL-JSON. |
 | `cr_sok` | Sök Crossref (artiklar m.m.), med fält- och årsfilter. |

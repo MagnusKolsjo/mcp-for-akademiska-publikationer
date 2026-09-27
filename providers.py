@@ -39,6 +39,8 @@ import time
 
 import arxiv_client
 import begreppsexpansion
+import bibliotek
+import fulltext
 import citering
 import crossref_client
 import datacite_client
@@ -594,6 +596,7 @@ def lista_kallor() -> dict:
         "berikningskallor": berikning,
         "svarscache": svarscache.status(),
         "begreppsexpansion": begreppsexpansion.status(),
+        "bibliotek": bibliotek.status(),
         "amnen": orkestrering.AMNEN,
         "typer": list(orkestrering.TYPER),
     }
@@ -1122,3 +1125,69 @@ def citera(
         "referens": citering.ur_post(post, format=format),
         "kalla": f"{kalla} (postens egna metadata)",
     }
+
+
+# ---------------------------------------------------------------------------
+# Arbetsbibliotek
+# ---------------------------------------------------------------------------
+
+def _oa_platser(doi: str) -> list[tuple[str, str | None]]:
+    """Öppna kopior för en DOI från Unpaywall (om aktiv) och OpenAlex."""
+    platser: list[tuple[str, str | None]] = []
+    if BERIKNING["unpaywall"]["aktiv"]:
+        try:
+            post, _ = svarscache.hamta_eller_kor(
+                "unpaywall", svarscache.POST, {"doi": doi}, lambda: unpaywall_client.hamta(doi))
+            platser += [(p["url"], p.get("licens")) for p in post.get("oa_platser", [])]
+        except DiscoveryKallaFel:
+            pass
+    if PROVIDERS["openalex"]["aktiv"] and not orkestrering.ar_pausad("openalex"):
+        try:
+            lista, _ = svarscache.hamta_eller_kor(
+                "openalex", svarscache.POST, {"oa_platser": doi}, lambda: openalex_client.oa_platser(doi))
+            platser += [(p["url"], p.get("licens")) for p in lista]
+        except DiscoveryKallaFel:
+            pass
+    return platser
+
+
+def spara_i_bibliotek(
+    *,
+    kalla: str | None = None,
+    id_: str | None = None,
+    doi: str | None = None,
+    projekt: str | None = None,
+    hamta_fulltext: bool = True,
+) -> dict:
+    """Sparar en post i arbetsbiblioteket med abstract, referens och fulltext.
+
+    Posten läses från den namngivna källan (kalla + id), eller via DOI från
+    OpenAlex och i andra hand Crossref."""
+    doi = normalisera_doi(doi)
+    if kalla and id_:
+        post = hamta_fran_kalla(kalla, id_)
+    elif doi:
+        post = None
+        fel = []
+        for kandidat in ("openalex", "crossref", "datacite"):
+            if kandidat in _aktiva_providers():
+                try:
+                    post = hamta_fran_kalla(kandidat, doi)
+                    break
+                except (ValueError, DiscoveryKallaFel, *(p["fel"] for p in PROVIDERS.values())) as exc:
+                    fel.append(f"{kandidat}: {exc}")
+        if post is None:
+            raise ValueError(f"DOI:n '{doi}' hittades inte: " + "; ".join(fel))
+    else:
+        raise ValueError("Ange kalla och id, eller doi.")
+    if not post.get("titel"):
+        raise ValueError("Posten saknar titel och kan inte sparas.")
+
+    try:
+        referens = citera(doi=post.get("doi"), kalla=post["kalla"], id_=post["kalla_id"])["referens"]
+    except Exception:  # noqa: BLE001 — en post utan färdig referens sparas ändå
+        referens = None
+
+    hamta = hamta_fulltext and not bibliotek.har_fulltext(bibliotek.post_id(post))
+    resultat = fulltext.hitta(post, oa_uppslag=_oa_platser) if hamta else None
+    return bibliotek.spara(post, projekt=projekt, referens=referens, fulltext_resultat=resultat)
