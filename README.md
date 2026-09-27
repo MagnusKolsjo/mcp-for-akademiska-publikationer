@@ -144,7 +144,13 @@ därmed en adress (post, stycke, sida) som går att kontrollera i efterhand.
 - **Fulltext** hämtas från källan (arXiv-PDF, Europe PMC:s JATS-XML, DiVA:s
   fulltextfil, Publiceras artikel-PDF) eller från öppna kopior för DOI:n
   (OpenAlex, Unpaywall). Landningssidor följs bara via metataggen
-  `citation_pdf_url`. Skannade PDF:er utan textlager sparas inte som fulltext.
+  `citation_pdf_url`.
+- **OCR:** sidor utan textlager (skannade PDF:er) maskinläses med Tesseract
+  via samma modul som övriga servrar i sviten (`pdftext_skydd.py`), på
+  publikationens språk plus engelska och en sida i taget, så att
+  sidnumren stämmer. OCR:ade sidor redovisas i `ocr_sidor` — kontrollera
+  citat från dem mot originalet. Högst 25 sidor per post
+  (`DISCOVERY_OCR_MAX_SIDOR`); resten redovisas i `sidor_utan_text`.
 - **Projekt:** poster kan märkas med ett eller flera projekt, t.ex. en
   rapport.
 - **Sökning** (`discovery_sok_i_bibliotek`) kombinerar ordsökning med

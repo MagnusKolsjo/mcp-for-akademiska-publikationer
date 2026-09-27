@@ -56,6 +56,16 @@ class Fulltext:
     format: str                      # "pdf" eller "jats"
     sidor: list[int] = field(default_factory=list)  # teckenposition där varje sida börjar
     licens: str | None = None
+    ocr_sidor: list[int] = field(default_factory=list)     # sidor (1-baserat) som OCR:ats
+    ej_ocr_sidor: list[int] = field(default_factory=list)  # sidor utan textlager som inte OCR:ats
+
+    @property
+    def metod(self) -> str:
+        if self.format != "pdf":
+            return self.format
+        if self.ej_ocr_sidor:
+            return "pdf, delvis utan text"
+        return "pdf+ocr" if self.ocr_sidor else "pdf"
 
 
 @dataclass
@@ -72,6 +82,7 @@ class Kandidat:
 def _stada(text: str) -> str:
     """Avstavning över radslut ihopfogad, radbrytningar inom stycken bort."""
     text = text.replace("\r", "")
+    text = re.sub("\xad[ \n]?", "", text)                  # mjukt bindestreck
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)          # av-\nstavning
     text = re.sub(r"(?<![.!?:\n])\n(?!\n)", " ", text)     # radbrytning mitt i en mening
@@ -80,19 +91,85 @@ def _stada(text: str) -> str:
     return text.strip()
 
 
-def _ur_pdf(innehall: bytes) -> tuple[str, list[int]]:
+# OCR av skannade sidor med samma modul som övriga servrar i sviten
+# (pdftext_skydd: pymupdf4llm + Tesseract i en egen process under minnes-
+# och tidsvakt). Bara sidor utan textlager OCR:as, en i taget, så att
+# texten hamnar på rätt sidnummer — det behövs för citat med sidangivelse.
+OCR_AKTIV = os.environ.get("DISCOVERY_OCR_AKTIV", "true").strip().lower() not in ("false", "0", "nej", "av")
+# ~4 s per sida: 25 sidor ryms inom de flesta klienters tidsgräns för ett
+# verktygsanrop. Övriga sidor utan text redovisas i sidor_utan_text.
+OCR_MAX_SIDOR = int(os.environ.get("DISCOVERY_OCR_MAX_SIDOR", "25"))
+
+# Publikationens språk (ISO 639-1) → Tesseract-språk. Engelska läggs alltid
+# till: abstract, referenser och tabeller är ofta på engelska även i
+# texter på andra språk.
+_TESSERACT = {
+    "sv": "swe", "no": "nor", "nb": "nor", "nn": "nor", "da": "dan", "fi": "fin",
+    "is": "isl", "de": "deu", "fr": "fra", "es": "spa", "pt": "por", "it": "ita",
+    "nl": "nld", "ru": "rus", "uk": "ukr", "pl": "pol", "zh": "chi_sim",
+    "ja": "jpn", "ko": "kor", "ar": "ara", "hi": "hin", "fa": "fas", "tr": "tur",
+}
+
+
+def ocr_status() -> dict:
+    """Finns OCR på datorn? För discovery_kallor."""
+    import importlib.util
+    import shutil
+    if not OCR_AKTIV:
+        return {"aktiv": False, "inaktiverad_orsak": "avstängd med DISCOVERY_OCR_AKTIV=false"}
+    saknas = [namn for namn, finns in (
+        ("pymupdf4llm", importlib.util.find_spec("pymupdf4llm") is not None),
+        ("tesseract", shutil.which("tesseract") is not None),
+    ) if not finns]
+    if saknas:
+        return {"aktiv": False, "inaktiverad_orsak": "kräver " + " och ".join(saknas)}
+    return {"aktiv": True, "max_sidor": OCR_MAX_SIDOR}
+
+
+def _ocr_sprak(sprak: str | None) -> str:
+    kod = _TESSERACT.get((sprak or "").lower())
+    return f"{kod}+eng" if kod and kod != "eng" else "eng+swe"
+
+
+def _fran_markdown(md: str) -> str:
+    """pymupdf4llm svarar med markdown; citat behöver ren text."""
+    md = re.sub(r"^#{1,6}\s+", "", md, flags=re.M)
+    md = re.sub(r"(\*\*|__)(.+?)\1", r"\2", md)
+    md = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", md)
+    return md
+
+
+def _ur_pdf(innehall: bytes, *, sprak: str | None = None, kalla_id: str = "") -> tuple[str, list[int], list[int], list[int]]:
+    """(text, sidstarter, OCR:ade sidor, sidor utan text som inte OCR:ades)."""
     import pymupdf  # lat import: behövs bara när biblioteket används
 
-    delar: list[str] = []
+    sidtexter: list[str] = []
+    utan_text: list[int] = []
+    with pymupdf.open(stream=innehall, filetype="pdf") as dok:
+        for i, sida in enumerate(dok):
+            text = _stada(sida.get_text("text"))
+            sidtexter.append(text)
+            if not text and sida.get_images(full=False):
+                utan_text.append(i)
+
+    ocr_sidor: list[int] = []
+    if utan_text and ocr_status()["aktiv"]:
+        import pdftext_skydd
+        for i in utan_text[:OCR_MAX_SIDOR]:
+            res = pdftext_skydd.extrahera_pdf(
+                innehall, prefix="DISCOVERY", standardsprak=_ocr_sprak(sprak), kalla_id=kalla_id, sidor=[i])
+            text = _stada(_fran_markdown(res.text))
+            if text and res.metod == "ocr":
+                sidtexter[i] = text
+                ocr_sidor.append(i + 1)
+    ej_ocr = [i + 1 for i in utan_text if (i + 1) not in ocr_sidor]
+
     sidor: list[int] = []
     langd = 0
-    with pymupdf.open(stream=innehall, filetype="pdf") as dok:
-        for sida in dok:
-            text = _stada(sida.get_text("text"))
-            sidor.append(langd)
-            delar.append(text)
-            langd += len(text) + 2
-    return "\n\n".join(delar), sidor
+    for text in sidtexter:
+        sidor.append(langd)
+        langd += len(text) + 2
+    return "\n\n".join(sidtexter), sidor, ocr_sidor, ej_ocr
 
 
 def _ur_jats(innehall: bytes) -> str:
@@ -198,7 +275,7 @@ def _get(url: str, user_agent: str | None) -> requests.Response:
     return svar
 
 
-def hamta(kandidat: Kandidat, *, djup: int = 0) -> Fulltext:
+def hamta(kandidat: Kandidat, *, djup: int = 0, sprak: str | None = None, kalla_id: str = "") -> Fulltext:
     """Hämtar och extraherar en kandidat. Kastar FulltextFel om den inte ger text."""
     svar = _get(kandidat.url, kandidat.user_agent)
     innehall = svar.content
@@ -206,13 +283,14 @@ def hamta(kandidat: Kandidat, *, djup: int = 0) -> Fulltext:
 
     if innehall[:5] == b"%PDF-" or "pdf" in typ:
         try:
-            text, sidor = _ur_pdf(innehall)
+            text, sidor, ocr_sidor, ej_ocr = _ur_pdf(innehall, sprak=sprak, kalla_id=kalla_id)
         except Exception as exc:  # trasig eller krypterad PDF
             raise FulltextFel(f"PDF:en från {svar.url} gick inte att läsa: {type(exc).__name__}") from exc
-        if len(text) < 500:
-            # Skannade PDF:er utan textlager ger nästan ingen text.
-            raise FulltextFel(f"PDF:en från {svar.url} saknar textlager (skannad?)")
-        return Fulltext(text=text, url=svar.url, format="pdf", sidor=sidor, licens=kandidat.licens)
+        if len(text.strip()) < 500:
+            orsak = ocr_status().get("inaktiverad_orsak") or "OCR gav ingen läsbar text"
+            raise FulltextFel(f"PDF:en från {svar.url} saknar textlager (skannad) och OCR gick inte: {orsak}")
+        return Fulltext(text=text, url=svar.url, format="pdf", sidor=sidor, licens=kandidat.licens,
+                        ocr_sidor=ocr_sidor, ej_ocr_sidor=ej_ocr)
 
     if "xml" in typ and b"<article" in innehall[:5000]:
         text = _ur_jats(innehall)
@@ -225,7 +303,7 @@ def hamta(kandidat: Kandidat, *, djup: int = 0) -> Fulltext:
         pdf = _pdf_ur_html(html)
         if pdf:
             licens = kandidat.licens or _licens_ur_html(html)
-            return hamta(Kandidat(pdf, licens, kandidat.user_agent), djup=1)
+            return hamta(Kandidat(pdf, licens, kandidat.user_agent), djup=1, sprak=sprak, kalla_id=kalla_id)
         raise FulltextFel(f"{svar.url} är en webbsida utan länk till fulltext (citation_pdf_url)")
 
     raise FulltextFel(f"{svar.url} gav varken PDF eller artikel-XML ({typ or 'okänd typ'})")
@@ -270,7 +348,7 @@ def hitta(post: dict, *, oa_uppslag) -> tuple[Fulltext | None, list[str]]:
     forsok: list[str] = []
     for kandidat in kandidater(post, oa_uppslag=oa_uppslag):
         try:
-            return hamta(kandidat), forsok
+            return hamta(kandidat, sprak=post.get("sprak"), kalla_id=str(post.get("kalla_id") or "")), forsok
         except FulltextFel as exc:
             forsok.append(str(exc))
     return None, forsok

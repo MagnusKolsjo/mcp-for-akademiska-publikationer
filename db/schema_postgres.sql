@@ -17,6 +17,7 @@ CREATE INDEX IF NOT EXISTS svarscache_giltig_till_idx ON discovery.svarscache (g
 
 -- Arbetsbibliotek: publikationer användaren valt att spara (se bibliotek.py).
 -- id är "doi:<doi>" när posten har DOI, annars "<kalla>:<kalla_id>".
+-- fulltext_metod: "pdf", "pdf+ocr" (minst en sida maskinläst), "jats" m.fl.
 CREATE TABLE IF NOT EXISTS discovery.bibliotek_poster (
     id TEXT PRIMARY KEY,
     kalla TEXT NOT NULL,
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS discovery.bibliotek_poster (
     referens TEXT,
     fulltext TEXT,
     fulltext_url TEXT,
+    fulltext_metod TEXT,
     fulltext_status TEXT NOT NULL,
     licens TEXT,
     sidor TEXT,

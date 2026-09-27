@@ -596,7 +596,7 @@ def lista_kallor() -> dict:
         "berikningskallor": berikning,
         "svarscache": svarscache.status(),
         "begreppsexpansion": begreppsexpansion.status(),
-        "bibliotek": bibliotek.status(),
+        "bibliotek": {**bibliotek.status(), "ocr": fulltext.ocr_status()},
         "amnen": orkestrering.AMNEN,
         "typer": list(orkestrering.TYPER),
     }

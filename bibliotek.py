@@ -259,6 +259,7 @@ def spara(post: dict, *, projekt: str | None, referens: str | None, fulltext_res
             falt.update({
                 "fulltext": ft.text if ft else None,
                 "fulltext_url": ft.url if ft else None,
+                "fulltext_metod": ft.metod if ft else None,
                 "licens": ft.licens if ft else None,
                 "sidor": json.dumps(ft.sidor) if ft and ft.sidor else None,
                 "tecken_totalt": len(ft.text) if ft else 0,
@@ -322,6 +323,14 @@ def spara(post: dict, *, projekt: str | None, referens: str | None, fulltext_res
         "oppen_licens": oppen_licens(licens), "tecken_totalt": tecken, "stycken": antal_stycken,
         "referens": referens,
     }
+    if ft is not None:
+        ut["fulltext_metod"] = ft.metod
+        if ft.ocr_sidor:
+            ut["ocr_sidor"] = ft.ocr_sidor
+            ut["ocr_anmarkning"] = ("Texten på dessa sidor är maskinläst (OCR) och kan innehålla "
+                                    "felläsningar; kontrollera citat mot originalet.")
+        if ft.ej_ocr_sidor:
+            ut["sidor_utan_text"] = ft.ej_ocr_sidor
     if status_ != "hämtad" and forsok:
         ut["fulltext_forsok"] = forsok[:6]
     return ut
@@ -454,17 +463,18 @@ def las(pid: str, *, stycke: int | None = None, kontext: int = 0,
         cur = conn.cursor()
         cur.execute(
             f"SELECT titel, forfattare, ar, sprak, licens, referens, fulltext, fulltext_status, "
-            f"tecken_totalt, sidor, sammanfattning, doi, url, fulltext_url FROM {pre}bibliotek_poster WHERE id = {p}",
+            f"tecken_totalt, sidor, sammanfattning, doi, url, fulltext_url, fulltext_metod "
+            f"FROM {pre}bibliotek_poster WHERE id = {p}",
             (pid,))
         rad = cur.fetchone()
         if rad is None:
             raise BibliotekFel(f"Posten '{pid}' finns inte i biblioteket. Se discovery_lista_bibliotek.")
         (titel, forfattare, ar, sprak, licens, referens, fulltext, ft_status,
-         tecken_totalt, sidor, sammanfattning, doi, url, ft_url) = rad
+         tecken_totalt, sidor, sammanfattning, doi, url, ft_url, ft_metod) = rad
         ut = {
             "post_id": pid, "titel": titel, "ar": ar, "sprak": sprak, "licens": licens,
             "referens": referens, "fulltext_status": ft_status, "tecken_totalt": tecken_totalt,
-            "doi": doi, "url": url, "fulltext_url": ft_url,
+            "doi": doi, "url": url, "fulltext_url": ft_url, "fulltext_metod": ft_metod,
         }
         if stycke is not None:
             cur.execute(

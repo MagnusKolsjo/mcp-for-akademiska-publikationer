@@ -2,8 +2,10 @@
 # lättviktig Discovery utan bibliotek: paketen importeras bara när
 # biblioteket används.
 
-# Textextraktion ur PDF
+# Textextraktion ur PDF, och OCR av skannade sidor (kräver även programmet
+# tesseract med språkdata, t.ex. brew install tesseract tesseract-lang)
 pymupdf>=1.24
+pymupdf4llm>=0.0.17
 
 # Semantisk sökning (DISCOVERY_BIBLIOTEK_SEMANTISK=true)
 sentence-transformers>=3.0

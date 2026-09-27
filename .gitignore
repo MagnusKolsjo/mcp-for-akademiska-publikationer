@@ -26,3 +26,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# OCR-kön från pdftext_skydd (kopior av skannade PDF:er)
+ocr_ko/

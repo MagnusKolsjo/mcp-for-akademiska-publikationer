@@ -146,7 +146,10 @@ def _forma_rad(rad: dict, rubrikindex: dict) -> dict | None:
 
     doi = _val(rad, rubrikindex, "doi") or None
     urn = _val(rad, rubrikindex, "urn")
-    fulltext_url = _val(rad, rubrikindex, "fulltext_url")
+    # Fältet kan rymma flera filer åtskilda av semikolon (t.ex. en skannad
+    # PDF och DiVA:s egen OCR-text); PDF:en föredras.
+    fulltext_filer = [u.strip() for u in _val(rad, rubrikindex, "fulltext_url").split(";") if u.strip()]
+    fulltext_url = next((u for u in fulltext_filer if u.lower().endswith(".pdf")), fulltext_filer[0] if fulltext_filer else "")
     fri_fulltext = _val(rad, rubrikindex, "fri_fulltext").lower() in ("yes", "ja", "true", "1", "x", "✓")
 
     url = f"https://urn.kb.se/resolve?urn={urn}" if urn else f"https://www.diva-portal.org/smash/record.jsf?pid={diva_id}"

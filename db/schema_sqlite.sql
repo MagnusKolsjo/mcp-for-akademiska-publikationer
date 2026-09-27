@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS bibliotek_poster (
     referens TEXT,
     fulltext TEXT,
     fulltext_url TEXT,
+    fulltext_metod TEXT,
     fulltext_status TEXT NOT NULL,
     licens TEXT,
     sidor TEXT,

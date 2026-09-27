@@ -21,6 +21,11 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   http(s)-adresser, och varje omdirigering kontrolleras (skydd mot SSRF).
 - Schemat flyttat till `db/schema_postgres.sql` och `db/schema_sqlite.sql`
   (plus `db/vektor_*.sql`), eftersom det vuxit förbi inline-storlek.
+- OCR av skannade sidor i arbetsbiblioteket med `pdftext_skydd.py`
+  (samma modul som övriga servrar i sviten: pymupdf4llm + Tesseract under
+  minnes- och tidsvakt), sida för sida för korrekta sidnummer, på
+  publikationens språk. `fulltext_metod` och `ocr_sidor` redovisar vad som
+  är maskinläst. `DISCOVERY_OCR_AKTIV`, `_MAX_SIDOR`, `_SPRAK`, `_KO_MAPP`.
 - Flerspråkig sökning och begreppsexpansion: `discovery_sok` väljer språk
   efter frågans språk, ämne och land (`orkestrering.expansionssprak`) och
   redovisar valet, saknade språk och täckningsvarningar under
@@ -138,6 +143,9 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   "Discovery" (verifierat) — se `diva_client.py`.
 
 ### Rättat
+- DiVA: fulltextfältet kan innehålla flera filer åtskilda av semikolon
+  (PDF och DiVA:s egen OCR-text); `oa_lank` blev då en ogiltig adress.
+  PDF:en väljs nu.
 - `discovery_sok`: träffarna sorterades nyast först, vilket begravde de
   mest relevanta. Nu rangordnas de med reciprocal rank fusion över
   källornas egna relevansordningar, och en post som flera källor hittar
