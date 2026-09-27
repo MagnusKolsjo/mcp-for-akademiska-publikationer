@@ -20,11 +20,13 @@ servern hämtar inte godtyckliga URL:er.
 
 from __future__ import annotations
 
-import io
+import ipaddress
 import os
 import re
+import socket
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from urllib.parse import urljoin, urlparse
 
 import requests
 
@@ -137,16 +139,51 @@ def _pdf_ur_html(html: str) -> str | None:
 # Hämtning
 # ---------------------------------------------------------------------------
 
-def _get(url: str, user_agent: str | None) -> requests.Response:
-    _vanta()
+_MAX_OMDIRIGERINGAR = 5
+
+
+def _kontrollera_adress(url: str) -> None:
+    """Avvisar adresser som inte är publika http(s)-adresser.
+
+    Adresserna kommer ur källornas metadata och ur hämtade sidor
+    (citation_pdf_url) — innehåll som tredje part kan påverka. Utan kontroll
+    kunde servern lockas att anropa interna tjänster (SSRF), t.ex.
+    molnleverantörers metadatatjänst på 169.254.169.254, när den körs delat
+    över http. Kontrollen görs för varje omdirigering."""
+    delar = urlparse(url)
+    if delar.scheme not in ("http", "https") or not delar.hostname:
+        raise FulltextFel(f"Otillåten adress (bara http/https): {url[:120]}")
     try:
-        svar = requests.get(
-            url,
-            headers={"User-Agent": user_agent or USER_AGENT, "Accept": "application/pdf, application/xml, text/html;q=0.8"},
-            timeout=TIMEOUT, stream=True, allow_redirects=True,
-        )
-    except requests.RequestException as exc:
-        raise FulltextFel(f"Kunde inte nå {url}: {type(exc).__name__}") from exc
+        adresser = {info[4][0] for info in socket.getaddrinfo(delar.hostname, delar.port or 443, proto=socket.IPPROTO_TCP)}
+    except socket.gaierror as exc:
+        raise FulltextFel(f"Kunde inte slå upp {delar.hostname}") from exc
+    for adress in adresser:
+        ip = ipaddress.ip_address(adress.split("%")[0])
+        if not ip.is_global or ip.is_multicast:
+            raise FulltextFel(f"Otillåten adress: {delar.hostname} pekar på en icke-publik adress ({ip}).")
+
+
+def _get(url: str, user_agent: str | None) -> requests.Response:
+    """GET med storleksgräns, där varje omdirigering kontrolleras för sig."""
+    for _ in range(_MAX_OMDIRIGERINGAR + 1):
+        _kontrollera_adress(url)
+        _vanta()
+        try:
+            svar = requests.get(
+                url,
+                headers={"User-Agent": user_agent or USER_AGENT, "Accept": "application/pdf, application/xml, text/html;q=0.8"},
+                timeout=TIMEOUT, stream=True, allow_redirects=False,
+            )
+        except requests.RequestException as exc:
+            raise FulltextFel(f"Kunde inte nå {url}: {type(exc).__name__}") from exc
+        if svar.is_redirect and svar.headers.get("Location"):
+            url = urljoin(url, svar.headers["Location"])
+            svar.close()
+            continue
+        break
+    else:
+        raise FulltextFel(f"För många omdirigeringar från {url}")
+
     if svar.status_code != 200:
         raise FulltextFel(f"{url} svarade {svar.status_code}")
     langd = int(svar.headers.get("Content-Length") or 0)
