@@ -37,7 +37,7 @@ KALLA = "openalex"
 # sänker inte kvaliteten på normaliseringen.
 _SELECT = (
     "id,doi,title,display_name,publication_year,type,authorships,"
-    "primary_location,open_access,cited_by_count,abstract_inverted_index"
+    "primary_location,open_access,cited_by_count,abstract_inverted_index,language"
 )
 
 
@@ -174,6 +174,7 @@ def _forma(item: dict) -> dict:
         "oa_lank": _oa_lank(oa, primary),
         "citeringar": item.get("cited_by_count"),
         "sammanfattning": _abstract(item.get("abstract_inverted_index")),
+        "sprak": item.get("language"),
     }
 
 

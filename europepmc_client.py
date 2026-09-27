@@ -15,7 +15,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text, sprakkod
 
 BASE_URL = os.environ.get(
     "EUROPEPMC_BASE_URL", "https://www.ebi.ac.uk/europepmc/webservices/rest"
@@ -82,6 +82,7 @@ def _forma(post: dict) -> dict:
         "oa_lank": _oa_lank(post),
         "citeringar": post.get("citedByCount"),
         "sammanfattning": ren_text(post.get("abstractText")),
+        "sprak": sprakkod(post.get("language")),
     }
 
 

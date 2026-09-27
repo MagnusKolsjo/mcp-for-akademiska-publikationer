@@ -18,7 +18,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text, sprakkod
 
 BASE_URL = os.environ.get("CORE_BASE_URL", "https://api.core.ac.uk/v3").rstrip("/")
 USER_AGENT = kallkonfig.user_agent("CORE_USER_AGENT")
@@ -80,6 +80,7 @@ def _forma(post: dict) -> dict:
         "oa_lank": oa_lank or None,
         "citeringar": post.get("citationCount"),
         "sammanfattning": ren_text(post.get("abstract")),
+        "sprak": sprakkod(post.get("language")),
     }
 
 

@@ -17,7 +17,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text, sprakkod
 
 BASE_URL = os.environ.get("ZBMATH_BASE_URL", "https://api.zbmath.org/v1").rstrip("/")
 USER_AGENT = kallkonfig.user_agent("ZBMATH_USER_AGENT")
@@ -97,6 +97,7 @@ def _forma(post: dict) -> dict:
         "url": post.get("zbmath_url"),
         "oa_lank": None,
         "sammanfattning": _sammanfattning(post),
+        "sprak": sprakkod((post.get("language") or {}).get("languages")),
     }
 
 

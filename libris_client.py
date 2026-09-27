@@ -19,7 +19,7 @@ import re
 
 import requests
 
-from kallhjalp import kapa_text, ren_text
+from kallhjalp import ren_text
 
 # Libris uppmanar uttryckligen anropare att skicka en beskrivande
 # User-Agent. Den identifierar trafiken för KB och kan kontaktas vid

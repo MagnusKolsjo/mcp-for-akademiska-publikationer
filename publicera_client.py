@@ -37,7 +37,7 @@ import requests
 
 import kallkonfig
 import openalex_client
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text, sprakkod
 
 PUBLICERA_BASE = os.environ.get("PUBLICERA_BASE_URL", "https://publicera.kb.se").rstrip("/")
 USER_AGENT = kallkonfig.user_agent("PUBLICERA_USER_AGENT")
@@ -141,6 +141,7 @@ def _tolka_post(record: ET.Element) -> dict:
         "typ": "article",
         "url": artikel_url,
         "oa_lank": artikel_url,
+        "sprak": sprakkod(_text_lista(meta, "language")[:1]),
         # Tidskrifterna lägger ofta abstract på flera språk; alla behålls,
         # åtskilda av en tom rad.
         "sammanfattning": "\n\n".join(

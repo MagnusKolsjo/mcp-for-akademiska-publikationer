@@ -22,7 +22,7 @@ import re
 
 import requests
 
-from kallhjalp import kapa_text, ren_text
+from kallhjalp import kapa_text, ren_text, sprakkod
 
 BASE_URL = os.environ.get("DATACITE_BASE_URL", "https://api.datacite.org").rstrip("/")
 USER_AGENT = os.environ.get(
@@ -156,6 +156,7 @@ def _forma_traff(item: dict) -> dict:
         "citeringar": attr.get("citationCount"),
         # Kapad i sökträffar och kort form; format="full" ger hela texten.
         "sammanfattning": kapa_text(_avkoda_sammanfattning(attr), KORT_SAMMANFATTNING_MAX)[0],
+        "sprak": sprakkod(attr.get("language")),
     }
 
 

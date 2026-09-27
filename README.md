@@ -93,6 +93,45 @@ En källa som svarar 429 (för många anrop), eller missar tidsgränsen två
 gånger i rad, pausas i fem minuter (`DISCOVERY_PAUS_VID_OVERBELASTNING_S`).
 `discovery_kallor` visar varje källas profil och statistik sedan start.
 
+## Språk och begreppsexpansion
+
+Forskning publiceras på olika språk i olika fält. I OpenAlex var 2023–2025
+omkring 90 % av medicinen, 89 % av datavetenskapen och 83 % av tekniken på
+engelska, men bara 63 % av samhällsvetenskapen och 57 % av humanioran — där
+är tyska, franska, spanska och portugisiska stora. Kinesisk forskning inom
+AI och datavetenskap publiceras nästan helt på engelska (av drygt 380 000
+datavetenskapliga verk med kinesisk institution var 546 på kinesiska), och
+indisk medicinsk forskning likaså. Kinesisk-, rysk-, arabisk- och
+japanskspråkig litteratur finns däremot till stor del i nationella
+databaser (CNKI, eLibrary.ru, Al Manhal, J-STAGE) som Discoverys källor
+bara delvis täcker.
+
+Därför söker `discovery_sok` alltid på frågans språk och engelska, lägger
+till tyska, franska och spanska inom humaniora, samhällsvetenskap, juridik
+och utbildning, och landets språk när `land` anges. Svaret redovisar valet
+under `begreppsexpansion`, med `saknade_sprak` och `tackningsvarningar`.
+`discovery_expandera` visar samma plan utan att söka.
+
+Varianterna på de andra språken tas fram på ett av två sätt:
+
+- **Av den anropande assistenten** (skillen `sok-vetenskapligt`): `q`
+  skickas som `{"sv": …, "en": …, "de": …}` och eventuella `synonymer`.
+- **Av servern**, om `DISCOVERY_BEGREPPSEXPANSION_AKTIV=true` och en
+  språkmodell är konfigurerad. Fail-open: fungerar den inte söks
+  originalfrågan.
+
+Varje källa får frågan på sitt språk; källor som stöder ELLER (OpenAlex,
+Libris, SwePub, DataCite, HAL, DOAJ, Europe PMC, EconBiz, arXiv, zbMATH,
+CORE) får varianter och synonymer som en ELLER-lista. Ett språk som ingen
+vald källa har som huvudspråk får ett eget, språkfiltrerat anrop mot
+OpenAlex, och varje begärt språk garanteras en plats på första sidan om
+det finns träffar. Varje träff har `sprak` (originalspråk) och
+`matchade_termer`.
+
+Svaren till användaren ges på användarens språk; titlar, abstract och
+citat återges på originalspråket med översättning intill, och en
+översättning presenteras aldrig som citat (se serverns instruktioner).
+
 ## Svarscache
 
 Med `DATABASE_URL` satt sparas källornas svar i en databas: sökningar i 6
@@ -153,6 +192,7 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
 | `discovery_kallor` | Lista källor: aktiv-status, filterstöd, avstängningsskäl. |
 | `discovery_oa_lank` | Öppen tillgång-länk för en DOI (OpenAlex + Unpaywall). |
 | `discovery_citeringar` | Citeringsgraf för en post (OpenAlex + Semantic Scholar). |
+| `discovery_expandera` | Vilka språk en fråga bör sökas på, med skäl och täckningsvarningar; färdiga varianter om serverexpansionen är på. |
 | `discovery_citera` | Färdig referens (APA, Harvard, IEEE … — alla CSL-stilar) eller BibTeX/RIS/CSL-JSON. |
 | `cr_sok` | Sök Crossref (artiklar m.m.), med fält- och årsfilter. |
 | `cr_hamta` | Läs ett verk i Crossref via DOI (kort eller full). |

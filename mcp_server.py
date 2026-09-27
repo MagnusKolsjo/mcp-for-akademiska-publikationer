@@ -34,6 +34,7 @@ Källor och verktyg:
     discovery_oa_lank   - öppen tillgång-länk för en DOI (OpenAlex + Unpaywall)
     discovery_citeringar- citeringsgraf för en post (OpenAlex + Semantic Scholar)
     discovery_citera    - färdig referens (APA, Harvard m.fl.) eller BibTeX/RIS
+    discovery_expandera - vilka språk en fråga bör sökas på, och varianterna
 
 Nya källor kopplas in via providers.py — se den modulen för mönstret. Varje
 källa kan slås av/på oberoende via DISCOVERY_<KALLA>_AKTIV i .env; för
@@ -89,6 +90,12 @@ mcp = MCPServer(
         "avstängd. discovery_oa_lank hittar öppna kopior och "
         "discovery_citeringar citeringsgrafen. libris_sok/cr_sok/dc_sok/"
         "arxiv_sok har egna, rikare frågespråk för käll-specifika filter."
+        " SPRÅK: svara alltid på det språk användaren skriver på. Titlar, "
+        "abstract och citat återges på originalspråket (fältet sprak) med "
+        "översättning intill, och det anges vilket originalspråket är; en "
+        "översättning presenteras aldrig som citat. Erbjud originaltexten "
+        "när den inte visats. discovery_expandera visar vilka språk en fråga "
+        "bör sökas på; skicka då q per språk till discovery_sok."
     ),
     version="0.1.0",
     cache_hints=CACHE_HINTAR,
@@ -163,6 +170,7 @@ class DiscoverySokResultat(TypedDict):
     antal_sammanslagna: int
     fran_plats: int
     traffar: list[dict[str, Any]]
+    begreppsexpansion: dict[str, Any]
     fortsattning: NotRequired[str]
     fel: NotRequired[dict[str, str]]
 
@@ -171,6 +179,7 @@ class DiscoveryKallorResultat(TypedDict):
     kallor: list[dict[str, Any]]
     berikningskallor: list[dict[str, Any]]
     svarscache: dict[str, Any]
+    begreppsexpansion: dict[str, Any]
     amnen: dict[str, str]
     typer: list[str]
 
@@ -621,6 +630,9 @@ def discovery_sok(
     land: str = "",
     sammanfattning_max: int = 300,
     fortsattning: str = "",
+    synonymer: dict[str, list[str]] | None = None,
+    sprak: list[str] | None = None,
+    expandera: str = "auto",
     limit_per_kalla: int = 10,
     filter: dict[str, dict] | None = None,
 ) -> DiscoverySokResultat:
@@ -661,12 +673,30 @@ def discovery_sok(
       fortsattning - token ur ett tidigare svar: nästa sida av samma
                  resultat, utan nya anrop till källorna. Övriga parametrar
                  ignoreras då.
+      synonymer - etablerade alternativa facktermer per språk,
+                 {"en": ["social isolation"]}; läggs som ELLER-termer hos
+                 källor som stöder det. Högst tre per språk; undvik allmänna
+                 enstaka ord, de ger brus.
+      sprak    - extra språk (ISO 639-1) utöver dem servern väljer.
+      expandera - "auto" (standard): är begreppsexpansionen på i servern
+                 expanderas en fråga given som sträng automatiskt. "av":
+                 ingen expansion. q som dict expanderas aldrig av servern.
       limit_per_kalla - träffar per källa före sammanslagning (standard 10).
       filter   - källspecifika råfilter: {"openalex": {"topics.id": "..."}}.
 
-    Varje träff har: kalla, kalla_id, doi, titel, forfattare (högst tre;
-    forfattare_antal anger totalen), ar, typ, url, oa_lank, citeringar,
-    sammanfattning (kapat abstract, sammanfattning_kapad), hittad_i.
+    Språkval: svaret redovisar under begreppsexpansion vilka språk frågan
+    bör sökas på och varför — frågans språk och engelska alltid; tyska,
+    franska och spanska inom humaniora, samhällsvetenskap, juridik och
+    utbildning; landets språk med land (t.ex. "CN" ger kinesiska). Språk
+    som inte söktes står i saknade_sprak, och tackningsvarningar anger när
+    litteraturen på ett språk till stor del ligger utanför källorna.
+
+    Varje träff har: kalla, kalla_id, doi, titel (på originalspråket),
+    sprak (originalspråk, ISO 639-1, null om källan inte anger det),
+    forfattare (högst tre; forfattare_antal anger totalen), ar, typ, url,
+    oa_lank, citeringar, sammanfattning (kapat abstract på originalspråket,
+    sammanfattning_kapad), hittad_i och — vid flera språk eller synonymer —
+    matchade_termer.
     Träffarna rangordnas efter relevans; en post som flera oberoende källor
     hittar rankas högre. En källa som fallerar redovisas under fel, och en
     som nyss varit överbelastad pausas en stund och står under ej_fragade.
@@ -688,7 +718,37 @@ def discovery_sok(
             land=land or None,
             filter=filter,
             sammanfattning_max=sammanfattning_max,
+            expandera=expandera,
+            synonymer=synonymer,
+            sprak=sprak,
         )
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
+
+
+@mcp.tool(title="Planera en flerspråkig sökning", annotations=LASNING_EXTERN)
+def discovery_expandera(
+    q: str | dict[str, str],
+    amne: str = "",
+    land: str = "",
+    sprak: list[str] | None = None,
+) -> dict[str, Any]:
+    """Visar vilka språk en fråga bör sökas på, utan att söka.
+
+    Returnerar språken med skäl (frågans språk och engelska alltid; fler
+    när ämnet har stor litteratur på andra språk eller frågan gäller ett
+    land), täckningsvarningar för språk vars litteratur till stor del ligger
+    utanför källorna, och — om begreppsexpansionen är påslagen i servern —
+    färdiga varianter per språk, synonymer och nyckelord.
+
+    Är servern utan expansion (server_expansion.aktiv = false) tar den
+    anropande assistenten själv fram varianterna på de listade språken och
+    skickar dem som q={"sv": …, "en": …, …} och synonymer till
+    discovery_sok. Använd etablerade fackbegrepp, inte ordagranna
+    översättningar.
+    """
+    try:
+        return providers.expandera_fraga(q, amne=amne or None, land=land or None, sprak=sprak)
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
 

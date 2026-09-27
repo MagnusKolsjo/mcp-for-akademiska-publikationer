@@ -80,7 +80,16 @@ _STANDARDPROFIL = {"roll": "komplement", "sprak": [], "amnen": [], "typer": [], 
 
 
 def profil(kalla: str) -> dict:
-    return PROFILER.get(kalla, _STANDARDPROFIL)
+    return PROFILER.get(bas_namn(kalla), _STANDARDPROFIL)
+
+
+def bas_namn(kalla: str) -> str:
+    """"openalex (zh)" → "openalex": språkspecifika anrop mot samma källa."""
+    return kalla.split(" (", 1)[0]
+
+
+def sprak_i_namn(kalla: str) -> str | None:
+    return kalla[kalla.index(" (") + 2:-1] if " (" in kalla else None
 
 
 # ---------------------------------------------------------------------------
@@ -119,17 +128,195 @@ def gissa_sprak(q: str) -> str:
     return "en"
 
 
-def fraga_for_kalla(q: str | dict, kalla: str) -> str:
-    """Frågan på källans språk när q är en dict per språk.
-
-    Källor med språktyngdpunkt får sitt språk om det finns; övriga får
-    engelska, annars den första varianten."""
-    if isinstance(q, str):
-        return q
+def _huvudsprak(q: dict, kalla: str) -> str:
+    """Källans språk om frågan finns på det, annars engelska, annars första."""
     for sprak in profil(kalla)["sprak"]:
         if q.get(sprak):
-            return q[sprak]
-    return q.get("en") or next(iter(q.values()))
+            return sprak
+    return "en" if q.get("en") else next(iter(q))
+
+
+# ELLER-syntax per källa, verifierad mot källornas svar (fler träffar för
+# "a ELLER b" än för a och b var för sig). DiVA, NVA och OSF tolkar OR som
+# ett vanligt ord och saknar alltså ELLER; Crossref rangordnar på enskilda
+# ord och behöver ingen operator. Källor utan ELLER får bara huvudvarianten.
+_ELLER = {
+    "openalex": " OR ", "publicera": " OR ", "swepub": " OR ", "datacite": " OR ",
+    "hal": " OR ", "doaj": " OR ", "europepmc": " OR ", "econbiz": " OR ",
+    "core": " OR ", "arxiv": " OR ", "libris": " | ", "zbmath": " | ",
+}
+
+# Språk en källa tar emot utöver sitt huvudspråk. OpenAlex indexerar alla
+# språk och får därför samtliga varianter; det är där kinesisk, arabisk
+# eller tysk litteratur kan hittas.
+_TAR_EMOT_SPRAK = {
+    "openalex": None,  # alla
+    "libris": {"sv", "en"}, "swepub": {"sv", "en"}, "publicera": {"sv", "en"},
+    "hal": {"fr", "en"}, "econbiz": {"de", "en"},
+}
+
+# Högst så många synonymer per språk läggs till en fråga — fler späder ut
+# rangordningen hos källan mer än de tillför.
+MAX_SYNONYMER_PER_SPRAK = 3
+
+
+def _som_term(text: str, kalla: str) -> str:
+    """En term i en ELLER-lista: flerordstermer som fras."""
+    text = " ".join(text.split())
+    if kalla == "arxiv":
+        return f'all:"{text}"' if " " in text else f"all:{text}"
+    return f'"{text}"' if " " in text else text
+
+
+def _som_grupp(text: str, kalla: str) -> str:
+    """En frågevariant i en ELLER-lista: orden behåller sin egen logik."""
+    text = " ".join(text.split())
+    if kalla == "arxiv":
+        ord_ = [o for o in text.split() if o.lower() not in _EN_ORD]
+        return "(" + " AND ".join(f"all:{o}" for o in ord_) + ")" if len(ord_) > 1 else f"all:{text}"
+    return f"({text})" if " " in text else text
+
+
+def fraga_for_kalla(q: str | dict, kalla: str, synonymer: dict[str, list[str]] | None = None) -> str:
+    """Frågan som skickas till en källa.
+
+    q som sträng skickas oförändrad (utan synonymer). q som dict per språk:
+    källor utan ELLER-stöd får sitt huvudspråk; källor med ELLER får
+    huvudvarianten, varianterna på de språk källan tar emot och upp till
+    MAX_SYNONYMER_PER_SPRAK synonymer per språk, som en ELLER-lista.
+    Huvudvarianten står först; den väger tyngst hos källor som rangordnar
+    efter termernas position eller frekvens."""
+    lasa_sprak = sprak_i_namn(kalla)
+    if lasa_sprak and isinstance(q, dict) and q.get(lasa_sprak):
+        return q[lasa_sprak]
+    kalla = bas_namn(kalla)
+    if isinstance(q, str):
+        if synonymer and kalla in _ELLER:
+            q = {gissa_sprak(q): q}
+        else:
+            return q
+    huvud = _huvudsprak(q, kalla)
+    op = _ELLER.get(kalla)
+    if not op:
+        return q[huvud]
+
+    tar_emot = _TAR_EMOT_SPRAK.get(kalla, {"en"}) if kalla in _TAR_EMOT_SPRAK else {"en"}
+    sprak_ordning = [huvud] + [s for s in q if s != huvud and (tar_emot is None or s in tar_emot)]
+    delar: list[str] = []
+    for sprak in sprak_ordning:
+        delar.append(_som_grupp(q[sprak], kalla))
+        for syn in (synonymer or {}).get(sprak, [])[:MAX_SYNONYMER_PER_SPRAK]:
+            delar.append(_som_term(syn, kalla))
+    unika = list(dict.fromkeys(delar))
+    if len(unika) == 1:
+        return q[huvud]
+    return op.join(unika)
+
+
+def matchade_termer(traff: dict, q: str | dict, synonymer: dict[str, list[str]] | None) -> list[str]:
+    """Vilka av frågans varianter och synonymer som syns i titel eller abstract."""
+    text = f"{traff.get('titel') or ''} {traff.get('sammanfattning') or ''}".lower()
+    ord_i_text = re.findall(r"\w+", text)
+    termer = list(q.values()) if isinstance(q, dict) else [q]
+    for lista in (synonymer or {}).values():
+        termer += lista[:MAX_SYNONYMER_PER_SPRAK]
+    funna = []
+    for term in termer:
+        delar = _termer(term)
+        if delar and all(_finns(t, text, ord_i_text) for t in delar):
+            funna.append(term)
+    return funna
+
+
+# ---------------------------------------------------------------------------
+# Vilka språk en fråga bör expanderas till
+# ---------------------------------------------------------------------------
+
+# Andel av publikationerna 2023–2025 som inte är på engelska, per fält i
+# OpenAlex (uppmätt 2026-09-27 med group_by=language). Naturvetenskap,
+# medicin och teknik publiceras till ~85–90 % på engelska; samhällsvetenskap
+# och humaniora till 57–63 %, med portugisiska, spanska, franska och tyska
+# som största övriga språk.
+_AMNEN_MED_FLERA_SPRAK = {
+    "humaniora": ["de", "fr", "es"],
+    "samhallsvetenskap": ["de", "fr", "es"],
+    "juridik": ["de", "fr"],
+    "utbildning": ["de", "fr", "es"],
+}
+
+# Regionala språk: tas med när frågan gäller landet (parametern land).
+_LANDETS_SPRAK = {
+    "SE": "sv", "NO": "no", "DK": "da", "FI": "fi", "IS": "is",
+    "DE": "de", "AT": "de", "CH": "de", "FR": "fr", "BE": "fr", "ES": "es",
+    "MX": "es", "AR": "es", "CL": "es", "CO": "es", "PE": "es", "BR": "pt", "PT": "pt",
+    "IT": "it", "NL": "nl", "PL": "pl", "RU": "ru", "UA": "uk", "TR": "tr",
+    "CN": "zh", "TW": "zh", "JP": "ja", "KR": "ko", "IR": "fa", "ID": "id",
+    "SA": "ar", "EG": "ar", "AE": "ar", "JO": "ar", "IQ": "ar", "MA": "ar",
+    "DZ": "ar", "TN": "ar", "LB": "ar", "QA": "ar", "KW": "ar", "SY": "ar",
+}
+
+# Språk där merparten av den inhemska litteraturen ligger i nationella
+# databaser som Discoverys källor bara delvis täcker. Antalen är verk
+# 2023–2025 med språket i OpenAlex (uppmätt 2026-09-27).
+TACKNINGSVARNINGAR = {
+    "zh": "Kinesiskspråkig forskning publiceras främst i nationella databaser "
+          "(CNKI, Wanfang) som saknar öppna API:er; OpenAlex har bara en del "
+          "(~126 000 verk 2023–2025). Kinesisk spjutspetsforskning inom AI och "
+          "naturvetenskap publiceras däremot nästan helt på engelska och täcks väl.",
+    "ru": "Ryskspråkig forskning ligger till stor del i eLibrary.ru; OpenAlex "
+          "har en del (~269 000 verk 2023–2025).",
+    "ar": "Arabiskspråkig forskning ligger till stor del i regionala databaser "
+          "(t.ex. Al Manhal, E-Marefa); OpenAlex har en del (~184 000 verk "
+          "2023–2025), mest inom teknik, humaniora och samhällsvetenskap.",
+    "ja": "Japanskspråkig forskning ligger till stor del i J-STAGE och CiNii; "
+          "OpenAlex har en del (~163 000 verk 2023–2025).",
+    "ko": "Koreanskspråkig forskning ligger till stor del i KCI; täckningen "
+          "i Discoverys källor är begränsad.",
+    "hi": "Medicinsk och naturvetenskaplig forskning från Indien publiceras "
+          "nästan helt på engelska (i OpenAlex 2023–2025: 6 av 266 000 "
+          "medicinska verk från indiska lärosäten på hindi). Hindi är relevant "
+          "främst för humaniora och samhällsfrågor; OpenAlex titlar på hindi "
+          "har ibland trasiga tecken.",
+}
+
+
+def sprak_utan_egen_kalla(q: str | dict, valda: list[str]) -> list[str]:
+    """Språk i frågan som ingen vald källa har som huvudspråk (utom
+    engelska). De får ett eget, språkfiltrerat anrop mot OpenAlex —
+    annars dominerar engelskspråkiga träffar OpenAlex rangordning och
+    litteratur på t.ex. kinesiska eller tyska når aldrig svaret."""
+    if not isinstance(q, dict):
+        return []
+    tackta = {"en"}
+    for namn in valda:
+        tackta |= set(profil(namn)["sprak"])
+    return [s for s in q if s not in tackta]
+
+
+def expansionssprak(
+    q: str | dict,
+    *,
+    amne: str | None = None,
+    land: str | None = None,
+    sprak: list[str] | None = None,
+) -> tuple[list[str], dict[str, str]]:
+    """Språk att expandera frågan till, med skäl: ([koder], {kod: skäl}).
+
+    Alltid frågans eget språk och engelska. Fler språk när ämnet har en
+    stor icke-engelsk litteratur, när frågan gäller ett land med eget
+    språk, eller när anroparen anger dem uttryckligen."""
+    skal: dict[str, str] = {}
+    for s in fragans_sprak(q):
+        skal[s] = "frågans språk"
+    skal.setdefault("en", "vetenskapens huvudspråk")
+    for s in _AMNEN_MED_FLERA_SPRAK.get(amne or "", []):
+        skal.setdefault(s, f"stor litteratur på språket inom {AMNEN.get(amne, amne)}")
+    if land and _LANDETS_SPRAK.get(land.upper()):
+        skal.setdefault(_LANDETS_SPRAK[land.upper()], f"frågan gäller {land.upper()}")
+    for s in sprak or []:
+        skal.setdefault(s.lower(), "uttryckligen begärt")
+    return list(skal), skal
+
 
 
 def fragans_sprak(q: str | dict) -> set[str]:
@@ -189,6 +376,18 @@ def _breddbar(p: dict, amne: str | None, typ: str | None) -> bool:
     return True
 
 
+_CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+
+
+def _finns(term: str, text: str, ord_i_text: list[str]) -> bool:
+    """Finns termen i texten? Kinesiska, japanska och koreanska skrivs utan
+    mellanrum mellan orden och jämförs därför som delsträng; övriga språk
+    ordvis på ordbörjan, så att böjningar (äldre/äldres) matchar."""
+    if _CJK.search(term):
+        return term in text
+    return any(o.startswith(term[:max(4, len(term) - 2)]) for o in ord_i_text)
+
+
 def _termer(text: str) -> set[str]:
     return {o for o in re.findall(r"\w+", (text or "").lower())
             if len(o) > 2 and o not in _SV_ORD and o not in _NO_ORD and o not in _EN_ORD}
@@ -212,10 +411,36 @@ def ar_traffsaker(traff: dict, q: str | dict) -> bool:
         termer = _termer(variant)
         if not termer:
             return True
-        funna = sum(1 for t in termer if any(o.startswith(t[:max(4, len(t) - 2)]) for o in ord_i_text))
+        funna = sum(1 for t in termer if _finns(t, text, ord_i_text))
         if funna * 2 >= len(termer):
             return True
     return False
+
+
+def sakra_sprak(traffar: list[dict], q: str | dict, limit: int) -> list[dict]:
+    """Ser till att varje språk i frågan syns på första sidan, om det finns träffar.
+
+    Rangordningen gynnar engelska: de breda källorna ger flest och
+    starkast engelskspråkiga träffar. Den bästa träffen på varje annat
+    begärt språk flyttas därför in på första sidan, sist, så att resten av
+    ordningen står kvar."""
+    if not isinstance(q, dict) or len(q) < 2:
+        return traffar
+
+    def _pa_sprak(t: dict, sprak: str) -> bool:
+        return t.get("sprak") == sprak or any(sprak_i_namn(k) == sprak for k in t.get("hittad_i", []))
+
+    lyfta: list[int] = []
+    for sprak in q:
+        index = next((i for i, t in enumerate(traffar) if _pa_sprak(t, sprak)), None)
+        if index is not None and index >= limit:
+            lyfta.append(index)
+    if not lyfta:
+        return traffar
+    lyfta = lyfta[:limit]
+    ovriga = [t for i, t in enumerate(traffar) if i not in set(lyfta)]
+    plats = limit - len(lyfta)
+    return ovriga[:plats] + [traffar[i] for i in lyfta] + ovriga[plats:]
 
 
 def behover_breddning(unika: int, limit: int) -> bool:
@@ -243,7 +468,7 @@ _statistik: dict[str, dict] = {}
 def ar_pausad(kalla: str) -> float | None:
     """Sekunder kvar av pausen, eller None om källan inte är pausad."""
     with _las:
-        kvar = _pausad_till.get(kalla, 0) - time.time()
+        kvar = _pausad_till.get(bas_namn(kalla), 0) - time.time()
     return kvar if kvar > 0 else None
 
 
@@ -267,7 +492,8 @@ def registrera(kalla: str, *, ok: bool, tid_s: float | None = None, fel: str | N
             s["senaste_fel"] = (fel or "")[:200]
         if overbelastad:
             s["pausningar"] += 1
-            _pausad_till[kalla] = time.time() + PAUS_S
+            # Språkfiltrerade anrop ("openalex (zh)") delar kvot med källan.
+            _pausad_till[bas_namn(kalla)] = time.time() + PAUS_S
 
 
 def ar_overbelastning(felmeddelande: str) -> bool:

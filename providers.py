@@ -38,6 +38,7 @@ import re
 import time
 
 import arxiv_client
+import begreppsexpansion
 import citering
 import crossref_client
 import datacite_client
@@ -59,7 +60,7 @@ import svarscache
 import swepub_client
 import unpaywall_client
 import zbmath_client
-from kallhjalp import DiscoveryKallaFel, kapa_text
+from kallhjalp import DiscoveryKallaFel, kapa_text, sprakkod
 
 # En källas anrop i discovery_sok får högst så här lång tid, oavsett dess
 # egen strypningstakt — annars kan en enda långsam eller nedgången källa
@@ -121,6 +122,7 @@ def _till_enhetligt(traff: dict) -> dict:
         "oa_lank": traff.get("oa_lank") or traff.get("url_pdf"),
         "citeringar": traff.get("citeringar"),
         "sammanfattning": traff.get("sammanfattning"),
+        "sprak": traff.get("sprak"),
     }
 
 
@@ -242,6 +244,7 @@ def _libris_normaliserad(traff: dict) -> dict:
         "oa_lank": None,
         "citeringar": None,
         "sammanfattning": traff.get("sammanfattning"),
+        "sprak": sprakkod(traff.get("sprak")),
     }
 
 
@@ -321,6 +324,14 @@ def _doaj_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
 
 def _core_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     return core_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+
+
+def _openalex_sprak_sok(sprak: str):
+    """sok-funktion mot OpenAlex begränsad till ett publiceringsspråk."""
+    def _sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
+        return _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land,
+                             {**(kalla_filter or {}), "language": sprak})
+    return _sok
 
 
 def _openalex_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
@@ -582,6 +593,7 @@ def lista_kallor() -> dict:
         "kallor": sokbara,
         "berikningskallor": berikning,
         "svarscache": svarscache.status(),
+        "begreppsexpansion": begreppsexpansion.status(),
         "amnen": orkestrering.AMNEN,
         "typer": list(orkestrering.TYPER),
     }
@@ -624,6 +636,7 @@ def _fraga_kallor(
     oppen_tillgang: bool | None,
     land: str | None,
     filter: dict[str, dict] | None,
+    synonymer: dict[str, list[str]] | None = None,
 ) -> tuple[dict[str, list[dict]], dict[str, dict], dict[str, str]]:
     """Frågar källorna parallellt: (träfflistor, per_kalla, fel).
 
@@ -634,7 +647,7 @@ def _fraga_kallor(
     def _fraga_en(namn: str):
         provider = aktiva[namn]
         kalla_filter = (filter or {}).get(namn)
-        fraga = orkestrering.fraga_for_kalla(q, namn)
+        fraga = orkestrering.fraga_for_kalla(q, namn, synonymer)
         t0 = time.monotonic()
         try:
             svar, fran_cache = svarscache.hamta_eller_kor(
@@ -691,7 +704,7 @@ def _fraga_kallor(
         orkestrering.registrera(namn, ok=True, tid_s=resultat["tid_s"], fran_cache=resultat["fran_cache"])
         listor[namn] = resultat["traffar"]
         per_kalla[namn] = {k: resultat[k] for k in ("totalt", "antal", "tid_s", "fran_cache")}
-        if isinstance(q, dict):
+        if isinstance(q, dict) or synonymer:
             per_kalla[namn]["fraga"] = resultat["fraga"]
     return listor, per_kalla, fel
 
@@ -737,6 +750,9 @@ def sok_alla(
     land: str | None = None,
     filter: dict[str, dict] | None = None,
     sammanfattning_max: int = 300,
+    expandera: str = "auto",
+    synonymer: dict[str, list[str]] | None = None,
+    sprak: list[str] | None = None,
 ) -> dict:
     """Orkestrerad sökning över flera källor, sammanslagen och rangordnad.
 
@@ -755,10 +771,20 @@ def sok_alla(
     limit_per_kalla, fran_ar, till_ar, oppen_tillgang, land, filter -
                 skickas till varje källa (land styr även källvalet).
     sammanfattning_max - abstractet kapas till så många tecken; 0 utelämnar det.
+    expandera - "auto": servern expanderar en fråga given som sträng till
+                fler språk och synonymer om begreppsexpansionen är på (se
+                begreppsexpansion.py). "av": ingen expansion. En fråga given
+                som dict per språk expanderas aldrig av servern.
+    synonymer - {språk: [termer]} från anroparen; läggs som ELLER-termer
+                hos källor som stöder det.
+    sprak     - extra språk att expandera till, utöver de som väljs efter
+                frågans språk, ämne och land.
 
     En källa som nyss varit överbelastad (429 eller tidsgräns) är pausad
     en stund och redovisas under ej_fragade i stället för att fördröja svaret.
     """
+    if expandera not in ("auto", "av"):
+        raise ValueError(f"Okänt värde för expandera: '{expandera}'. Välj 'auto' eller 'av'.")
     if strategi not in ("auto", "bred"):
         raise ValueError(f"Okänd strategi '{strategi}'. Välj 'auto' eller 'bred'.")
     if amne and amne not in orkestrering.AMNEN:
@@ -769,6 +795,9 @@ def sok_alla(
         q = {k.strip().lower(): v for k, v in q.items() if v and v.strip()}
     if not q:
         raise ValueError("Ange en fråga (q).")
+
+    q, synonymer, expansion = _expandera(q, amne=amne, land=land, sprak=sprak,
+                                         expandera=expandera, synonymer=synonymer)
 
     aktiva = _aktiva_providers()
     ej_fragade: dict[str, str] = {}
@@ -794,12 +823,19 @@ def sok_alla(
                 kvar[namn] = skal
         return kvar
 
+    # Språk som ingen vald källa täcker får ett språkfiltrerat OpenAlex-anrop.
+    if "openalex" in aktiva and not kallor:
+        for s in orkestrering.sprak_utan_egen_kalla(q, list(karna)):
+            namn = f"openalex ({s})"
+            aktiva[namn] = dict(aktiva["openalex"], sok=_openalex_sprak_sok(s))
+            karna[namn] = f"språk: {s} (OpenAlex filtrerat på språket)"
+
     karna = _utan_pausade(karna)
     # Ett limit större än vad kärnan kan ge med limit_per_kalla höjer
     # antalet per källa, i stället för att fler källor frågas i onödan.
     limit_per_kalla = min(50, max(limit_per_kalla, -(-limit // max(1, len(karna)))))
     parametrar = dict(q=q, limit_per_kalla=limit_per_kalla, fran_ar=fran_ar, till_ar=till_ar,
-                      oppen_tillgang=oppen_tillgang, land=land, filter=filter)
+                      oppen_tillgang=oppen_tillgang, land=land, filter=filter, synonymer=synonymer)
     listor, per_kalla, fel = _fraga_kallor(list(karna), aktiva, **parametrar)
     fragade = dict(karna)
 
@@ -832,6 +868,10 @@ def sok_alla(
     # matchat enstaka ord (Crossref) och hamnar annars högt bara för att de
     # var först i sin källas lista.
     alla.sort(key=lambda t: not orkestrering.ar_traffsaker(t, q))
+    alla = orkestrering.sakra_sprak(alla, q, max(1, limit))
+    if (isinstance(q, dict) and len(q) > 1) or synonymer:
+        for t in alla:
+            t["matchade_termer"] = orkestrering.matchade_termer(t, q, synonymer)
 
     resultat = {
         "fraga": q,
@@ -840,6 +880,7 @@ def sok_alla(
         "fragade_kallor": fragade,
         "ej_fragade": ej_fragade,
         "per_kalla": per_kalla,
+        "begreppsexpansion": expansion,
         "_alla": alla,
         "_limit": max(1, limit),
         "_sammanfattning_max": sammanfattning_max,
@@ -847,6 +888,70 @@ def sok_alla(
     if fel:
         resultat["fel"] = fel
     return _sida(resultat, 0)
+
+
+def _expandera(
+    q: str | dict,
+    *,
+    amne: str | None,
+    land: str | None,
+    sprak: list[str] | None,
+    expandera: str,
+    synonymer: dict[str, list[str]] | None,
+) -> tuple[str | dict, dict[str, list[str]] | None, dict]:
+    """Frågan efter begreppsexpansion: (q, synonymer, redovisning).
+
+    Anroparens egna varianter och synonymer går alltid före; servern
+    expanderar bara en fråga given som sträng, och bara om expansionen är
+    påslagen. Redovisningen säger vilka språk som valdes och varför, vem
+    som expanderade, vilka språk som saknas och kända täckningsluckor."""
+    sprak_lista, sprak_skal = orkestrering.expansionssprak(q, amne=amne, land=land, sprak=sprak)
+    redovisning: dict = {"sprak": sprak_skal, "gjord_av": None}
+    synonymer = {k.lower(): v for k, v in (synonymer or {}).items() if v} or None
+
+    if isinstance(q, dict):
+        redovisning["gjord_av"] = "anroparen"
+    elif expandera == "auto" and begreppsexpansion.aktiv():
+        original = q
+        exp, _ = svarscache.hamta_eller_kor(
+            "begreppsexpansion", svarscache.POST,
+            {"q": original, "sprak": sprak_lista, "amne": amne},
+            lambda: begreppsexpansion.expandera(original, sprak=sprak_lista, amne=amne),
+        )
+        if exp:
+            # Användarens egen formulering går före modellens på frågans språk.
+            q = {**exp["varianter"], orkestrering.gissa_sprak(original): original}
+            synonymer = {**exp["synonymer"], **(synonymer or {})} or None
+            redovisning.update(gjord_av="servern", nyckelord=exp.get("nyckelord", []))
+
+    finns = set(q) if isinstance(q, dict) else orkestrering.fragans_sprak(q)
+    saknas = [s for s in sprak_lista if s not in finns]
+    if saknas:
+        redovisning["saknade_sprak"] = saknas
+        redovisning["rad"] = (
+            "Frågan söktes inte på " + ", ".join(saknas) + ". Skicka q per språk, "
+            "t.ex. {\"sv\": …, \"en\": …}, för att nå litteratur på dem."
+        )
+    varningar = {s: orkestrering.TACKNINGSVARNINGAR[s] for s in sprak_lista if s in orkestrering.TACKNINGSVARNINGAR}
+    if varningar:
+        redovisning["tackningsvarningar"] = varningar
+    if isinstance(q, dict):
+        redovisning["varianter"] = q
+    if synonymer:
+        redovisning["synonymer"] = synonymer
+    return q, synonymer, redovisning
+
+
+def expandera_fraga(q: str | dict, *, amne: str | None = None, land: str | None = None,
+                    sprak: list[str] | None = None) -> dict:
+    """Begreppsexpansionen utan sökning, för discovery_expandera."""
+    if amne and amne not in orkestrering.AMNEN:
+        raise ValueError(f"Okänt ämne '{amne}'. Giltiga: {', '.join(orkestrering.AMNEN)}.")
+    if not q:
+        raise ValueError("Ange en fråga (q).")
+    _, _, redovisning = _expandera(q, amne=amne, land=land, sprak=sprak, expandera="auto", synonymer=None)
+    redovisning["server_expansion"] = begreppsexpansion.status()
+    return redovisning
 
 
 def sok_fortsattning(token: str) -> dict:

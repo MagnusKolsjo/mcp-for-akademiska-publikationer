@@ -6,6 +6,21 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
 ## [Unreleased]
 
 ### Tillagt
+- Flerspråkig sökning och begreppsexpansion: `discovery_sok` väljer språk
+  efter frågans språk, ämne och land (`orkestrering.expansionssprak`) och
+  redovisar valet, saknade språk och täckningsvarningar under
+  `begreppsexpansion`. Varianter per språk kommer från anroparen
+  (`q` som dict, `synonymer`) eller från servern (`begreppsexpansion.py`,
+  OpenAI-kompatibel språkmodell, `DISCOVERY_BEGREPPSEXPANSION_*`,
+  redigerbar prompt i `prompts/`, fail-open, cachad). Källor med
+  ELLER-stöd får varianter och synonymer som ELLER-lista; språk utan egen
+  källa får ett språkfiltrerat OpenAlex-anrop; varje begärt språk
+  garanteras en plats på första sidan.
+- `discovery_expandera`: språkplanen för en fråga utan att söka.
+- `sprak` (originalspråk, ISO 639-1) i det gemensamma träffschemat, från
+  alla källor som anger det, och `matchade_termer` vid flerspråkig sökning.
+- Serverns instruktioner: svara på användarens språk, återge titlar,
+  abstract och citat på originalspråket med översättning, erbjud originalet.
 - Sökorkestrering i `discovery_sok` (`orkestrering.py`): i stället för att
   fråga alla källor väljs en kärna — OpenAlex och Crossref plus källor som
   passar frågans språk, `amne`, `typ` och `land` — som breddas till

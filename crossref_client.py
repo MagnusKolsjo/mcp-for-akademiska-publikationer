@@ -26,7 +26,7 @@ import re
 
 import requests
 
-from kallhjalp import kapa_text, ren_text
+from kallhjalp import kapa_text, ren_text, sprakkod
 
 BASE_URL = os.environ.get("CROSSREF_BASE_URL", "https://api.crossref.org").rstrip("/")
 # E-post som lägger anropen i Crossrefs polite pool. Lämnas tom om man inte
@@ -167,6 +167,7 @@ def _forma_traff(item: dict) -> dict:
         "citeringar": item.get("is-referenced-by-count"),
         # Kapad i sökträffar och kort form; format="full" ger hela texten.
         "sammanfattning": kapa_text(_avkoda_abstract(item.get("abstract")), KORT_SAMMANFATTNING_MAX)[0],
+        "sprak": sprakkod(item.get("language")),
     }
 
 

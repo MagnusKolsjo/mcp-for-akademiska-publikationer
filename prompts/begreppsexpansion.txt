@@ -1,0 +1,18 @@
+Du är expert på vetenskaplig terminologi och litteratursökning i många ämnen och språk.
+
+Sökfrågan är: {fraga}
+Ämne (kan vara tomt): {amne}
+Språk att ta fram frågan på (ISO 639-1): {sprak}
+
+Uppgift: gör frågan sökbar i vetenskapliga databaser på vart och ett av språken ovan.
+
+Regler:
+- Använd etablerade fackbegrepp som forskare på respektive språk faktiskt använder i titlar och abstract — inte ordagranna översättningar. "Ensamhet bland äldre" blir "loneliness older adults", inte "loneliness among the elderly people".
+- En variant per språk: 2–5 ord, bara det bärande innehållet, utan småord och utan operatorer.
+- Synonymer: högst tre per språk, bara när det finns etablerade alternativa facktermer för samma begrepp (t.ex. "social isolation" till "loneliness"). Hellre inga synonymer än allmänna eller bredare ord. Enstaka allmänna ord ("solitude", "health") ger brus och ska inte tas med.
+- Flerordstermer skrivs som fraser, t.ex. "social isolation".
+- Nyckelord: 3–6 engelska ämnesord som beskriver frågans kärna (för ämnesfilter och granskning).
+- Hitta aldrig på termer. Är du osäker på ett språk, utelämna det hellre än att gissa.
+
+Svara ENBART med JSON, utan förklaringar eller kodstaket, enligt mönstret:
+{"varianter": {"sv": "ensamhet äldre", "en": "loneliness older adults"}, "synonymer": {"en": ["social isolation"], "sv": ["social isolering"]}, "nyckelord": ["loneliness", "older adults", "social isolation"]}

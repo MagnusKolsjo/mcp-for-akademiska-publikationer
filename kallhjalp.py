@@ -100,3 +100,44 @@ def kapa_text(text: str | None, max_tecken: int) -> tuple[str | None, bool]:
         return text, False
     kapad = text[:max_tecken].rsplit(" ", 1)[0].rstrip(" ,;:")
     return kapad + "…", True
+
+
+# ISO 639-2/3-koder och engelska språknamn → ISO 639-1. Källorna anger
+# språk på alla tre sätt (DiVA "swe", HAL "fr", zbMATH "English", NVA en
+# lexvo-URI); den gemensamma formen är tvåbokstavskoden.
+_SPRAKKODER = {
+    "swe": "sv", "swedish": "sv", "eng": "en", "english": "en",
+    "nor": "no", "norwegian": "no", "nob": "nb", "nno": "nn",
+    "dan": "da", "danish": "da", "fin": "fi", "finnish": "fi",
+    "isl": "is", "ice": "is", "icelandic": "is",
+    "ger": "de", "deu": "de", "german": "de", "fre": "fr", "fra": "fr", "french": "fr",
+    "spa": "es", "spanish": "es", "por": "pt", "portuguese": "pt",
+    "ita": "it", "italian": "it", "dut": "nl", "nld": "nl", "dutch": "nl",
+    "rus": "ru", "russian": "ru", "ukr": "uk", "ukrainian": "uk", "pol": "pl", "polish": "pl",
+    "chi": "zh", "zho": "zh", "chinese": "zh", "jpn": "ja", "japanese": "ja",
+    "kor": "ko", "korean": "ko", "ara": "ar", "arabic": "ar", "hin": "hi", "hindi": "hi",
+    "per": "fa", "fas": "fa", "persian": "fa", "tur": "tr", "turkish": "tr",
+    "ind": "id", "indonesian": "id", "lat": "la", "latin": "la",
+    "est": "et", "lav": "lv", "lit": "lt", "cze": "cs", "ces": "cs", "hun": "hu",
+}
+
+
+def sprakkod(varde) -> str | None:
+    """Normaliserar en källas språkangivelse till ISO 639-1 (t.ex. "sv").
+
+    En lista med flera språk ger None: då beskriver fältet oftast vilka
+    språk en tidskrift publicerar på, inte den enskilda publikationens."""
+    if isinstance(varde, dict):
+        varde = varde.get("code") or varde.get("languages") or varde.get("name")
+    if isinstance(varde, (list, tuple)):
+        varden = [v for v in varde if v]
+        if len(varden) != 1:
+            return None
+        varde = varden[0]
+    if not varde:
+        return None
+    text = str(varde).strip().rstrip("/").split("/")[-1].lower()
+    text = text.split("-")[0].split("_")[0]
+    if len(text) == 2:
+        return text
+    return _SPRAKKODER.get(text)

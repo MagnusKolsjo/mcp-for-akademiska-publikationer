@@ -19,7 +19,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text, sprakkod
 
 BASE_URL = os.environ.get("NVA_BASE_URL", "https://api.nva.unit.no").rstrip("/")
 # NVA ber uttryckligen om en User-Agent med kontaktuppgift — bakas in när
@@ -101,6 +101,7 @@ def _forma(post: dict) -> dict:
         "url": _landningssida(post),
         "oa_lank": _oa_lank(post),
         "sammanfattning": ren_text(ed.get("abstract")),
+        "sprak": sprakkod(ed.get("language")),
     }
 
 

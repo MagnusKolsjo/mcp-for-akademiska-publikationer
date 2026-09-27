@@ -17,7 +17,7 @@ import os
 import requests
 
 import kallkonfig
-from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text
+from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text, sprakkod
 
 BASE_URL = os.environ.get("HAL_BASE_URL", "https://api.archives-ouvertes.fr/search").rstrip("/")
 USER_AGENT = kallkonfig.user_agent("HAL_USER_AGENT")
@@ -25,7 +25,7 @@ TIMEOUT = float(os.environ.get("HAL_TIMEOUT", "30"))
 
 KALLA = "hal"
 
-_FALT = "halId_s,title_s,authFullName_s,producedDateY_i,docType_s,doiId_s,fileMain_s,uri_s,abstract_s"
+_FALT = "halId_s,title_s,authFullName_s,producedDateY_i,docType_s,doiId_s,fileMain_s,uri_s,abstract_s,language_s"
 
 
 class HalFel(DiscoveryKallaFel):
@@ -72,6 +72,7 @@ def _forma(post: dict) -> dict:
         "url": post.get("uri_s") or (f"https://hal.science/{post['halId_s']}" if post.get("halId_s") else None),
         "oa_lank": post.get("fileMain_s"),
         "sammanfattning": ren_text(post.get("abstract_s")),
+        "sprak": sprakkod(post.get("language_s")),
     }
 
 
