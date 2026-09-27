@@ -17,7 +17,8 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   SQLite (FTS5 + sqlite-vec). `DISCOVERY_BIBLIOTEK_AKTIV` och
   `DISCOVERY_BIBLIOTEK_SEMANTISK` styr funktionen; tunga paket laddas bara
   vid användning (`requirements-bibliotek.txt`). Över http visas texter
-  utan öppen licens bara som utdrag.
+  utan öppen licens bara som utdrag. Fulltext hämtas bara från publika
+  http(s)-adresser, och varje omdirigering kontrolleras (skydd mot SSRF).
 - Schemat flyttat till `db/schema_postgres.sql` och `db/schema_sqlite.sql`
   (plus `db/vektor_*.sql`), eftersom det vuxit förbi inline-storlek.
 - Flerspråkig sökning och begreppsexpansion: `discovery_sok` väljer språk
