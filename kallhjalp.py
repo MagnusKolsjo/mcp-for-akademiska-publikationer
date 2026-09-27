@@ -83,6 +83,9 @@ def ren_text(text) -> str | None:
     text = re.sub(r"</?(?:jats:)?p\b[^>]*>|<br\s*/?>", "\n", str(text))
     text = re.sub(r"<[^>]+>", " ", text)
     text = html.unescape(text)
+    # NUL och andra styrtecken förekommer i källornas metadata och kan inte
+    # lagras i PostgreSQL.
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
     stycken = [" ".join(rad.split()) for rad in text.split("\n")]
     return "\n".join(s for s in stycken if s) or None
 

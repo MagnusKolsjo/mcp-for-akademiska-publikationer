@@ -217,11 +217,14 @@ def sok(
     params: dict = {"per_page": str(max(1, min(limit, 200))), "select": _SELECT}
     if q:
         params["search"] = q
+    # OpenAlex tar numera publiceringsdatum bara som filter, inte som egna
+    # parametrar (from_publication_date= ger 400).
+    datum: list[str] = []
     if fran_ar:
-        params["from_publication_date"] = f"{int(fran_ar):04d}-01-01"
+        datum.append(f"from_publication_date:{int(fran_ar):04d}-01-01")
     if till_ar:
-        params["to_publication_date"] = f"{int(till_ar):04d}-12-31"
-    filterstrang = _bygg_filter(oppen_tillgang, land, filter)
+        datum.append(f"to_publication_date:{int(till_ar):04d}-12-31")
+    filterstrang = ",".join(d for d in [_bygg_filter(oppen_tillgang, land, filter), *datum] if d)
     if filterstrang:
         params["filter"] = filterstrang
 

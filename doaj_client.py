@@ -11,6 +11,7 @@ API-referens: https://doaj.org/api/docs
 
 from __future__ import annotations
 
+import datetime
 import os
 import urllib.parse
 
@@ -24,6 +25,9 @@ USER_AGENT = kallkonfig.user_agent("DOAJ_USER_AGENT")
 TIMEOUT = float(os.environ.get("DOAJ_TIMEOUT", "30"))
 
 KALLA = "doaj"
+
+
+_MAX_AR = 30
 
 
 class DoajFel(DiscoveryKallaFel):
@@ -101,20 +105,34 @@ def sok(
 
     q              - fritextfråga (Elasticsearch query string-syntax stöds).
     limit          - max antal träffar (1-100, standard 20).
-    fran_ar/till_ar- läggs till i frågan som ett intervall på bibjson.year.
+    fran_ar/till_ar- läggs till som enskilda år på bibjson.year (DOAJ spärrar
+                     intervall); längre spann än _MAX_AR år filtreras efter svaret.
     """
     if not q:
         raise DoajFel("Ange en fritextfråga (q).")
     fraga = q
+    efterfiltrera = False
     if fran_ar or till_ar:
-        lag = int(fran_ar) if fran_ar else "*"
-        hog = int(till_ar) if till_ar else "*"
-        fraga = f"{q} AND bibjson.year:[{lag} TO {hog}]"
+        # DOAJ spärrar intervallfrågor ("disallowed Lucene features"), men
+        # godtar enskilda år med OR. Ett längre spann än _MAX_AR filtreras i
+        # stället här efter svaret, så att adressen inte blir orimligt lång.
+        hog = int(till_ar) if till_ar else datetime.date.today().year
+        lag = int(fran_ar) if fran_ar else hog - _MAX_AR + 1
+        if hog - lag + 1 <= _MAX_AR:
+            ar = " OR ".join(f"bibjson.year:{a}" for a in range(lag, hog + 1))
+            fraga = f"({q}) AND ({ar})"
+        else:
+            efterfiltrera = True
 
     kodad = urllib.parse.quote(fraga, safe="")
     data = _hamta(f"/search/articles/{kodad}", {"pageSize": str(max(1, min(limit, 100)))})
     traffar = [_forma(p) for p in data.get("results", [])]
-    return {"kalla": KALLA, "totalt": data.get("total"), "antal": len(traffar), "traffar": traffar}
+    totalt = data.get("total")
+    if efterfiltrera:
+        traffar = [t for t in traffar if t["ar"] and (not fran_ar or t["ar"] >= int(fran_ar))
+                   and (not till_ar or t["ar"] <= int(till_ar))]
+        totalt = None  # källans total gäller hela frågan, inte årsurvalet
+    return {"kalla": KALLA, "totalt": totalt, "antal": len(traffar), "traffar": traffar}
 
 
 def hamta(doaj_id: str) -> dict:

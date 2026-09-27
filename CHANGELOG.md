@@ -146,6 +146,16 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   "Discovery" (verifierat) — se `diva_client.py`.
 
 ### Rättat
+- Arbetsbiblioteket: `discovery_spara` kraschade med "string literal cannot
+  contain NUL" för PDF:er vars text innehåller NUL-tecken (bl.a. flera
+  arXiv-artiklar). NUL och andra styrtecken rensas nu vid extraktionen och
+  i källornas metadata.
+- OpenAlex: `fran_ar`/`till_ar` gav 400, eftersom `from_publication_date` och
+  `to_publication_date` numera bara godtas som filter. Påverkade även
+  Publicera, som söker via OpenAlex.
+- DOAJ: `fran_ar`/`till_ar` gav "disallowed Lucene features", eftersom DOAJ
+  spärrar intervallfrågor. Åren skickas nu som enskilda år med OR; spann
+  längre än 30 år filtreras efter svaret.
 - DiVA: fulltextfältet kan innehålla flera filer åtskilda av semikolon
   (PDF och DiVA:s egen OCR-text); `oa_lank` blev då en ogiltig adress.
   PDF:en väljs nu.

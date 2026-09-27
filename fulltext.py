@@ -79,9 +79,15 @@ class Kandidat:
 # Extraktion
 # ---------------------------------------------------------------------------
 
+_STYRTECKEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
 def _stada(text: str) -> str:
     """Avstavning över radslut ihopfogad, radbrytningar inom stycken bort."""
     text = text.replace("\r", "")
+    # NUL och andra styrtecken är rester av PDF:ens teckenkodning, inte text.
+    # PostgreSQL vägrar dessutom lagra NUL ("string literal cannot contain NUL").
+    text = _STYRTECKEN.sub("", text)
     text = re.sub("\xad[ \n]?", "", text)                  # mjukt bindestreck
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)          # av-\nstavning
@@ -188,7 +194,7 @@ def _ur_jats(innehall: bytes) -> str:
     delar: list[str] = []
     for elem in body.iter():
         if elem.tag in ("title", "p"):
-            text = " ".join("".join(elem.itertext()).split())
+            text = _STYRTECKEN.sub("", " ".join("".join(elem.itertext()).split()))
             if text:
                 delar.append(text)
     return "\n\n".join(delar)
