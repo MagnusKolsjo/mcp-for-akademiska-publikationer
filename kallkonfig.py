@@ -20,8 +20,8 @@ uppdraget har fortsatt företräde för sin källa — bakåtkompatibilitet, int
 ett nytt krav.
 
 En källa som kräver e-post eller nyckel men saknar det inaktiveras
-automatiskt (se `krav_saknas`); den registreras då inte som verktyg och
-ingår inte i discovery_sok, och discovery_kallor förklarar varför.
+automatiskt (se `krav_saknas`); den ingår då inte i discovery_sok eller
+discovery_hamta, och discovery_kallor förklarar varför.
 """
 
 from __future__ import annotations

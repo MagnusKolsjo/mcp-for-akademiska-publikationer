@@ -37,12 +37,16 @@ _session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"}
 _vanta = ny_taktbegransare(1.0)
 
 
-def _hamta(path: str, params: dict) -> dict:
+def _hamta(path: str, params: dict) -> dict | None:
+    """GET mot zbMATH Open. None betyder 404 — källan svarar så både för en
+    okänd post och för en sökning utan träffar; anroparen avgör vilket."""
     _vanta()
     try:
         svar = _session.get(f"{BASE_URL}{path}", params=params, timeout=TIMEOUT)
     except requests.RequestException as exc:
         raise ZbmathFel(f"Kunde inte nå zbMATH Open ({BASE_URL}{path}): {type(exc).__name__}") from exc
+    if svar.status_code == 404:
+        return None
     if svar.status_code != 200:
         raise ZbmathFel(f"zbMATH Open svarade {svar.status_code}: {svar.text[:300]}")
     try:
@@ -110,6 +114,8 @@ def sok(
         "search_string": fraga,
         "results_per_page": str(max(1, min(limit, 1000))),
     })
+    if data is None:
+        return {"kalla": KALLA, "totalt": 0, "antal": 0, "traffar": []}
     traffar = [_forma(p) for p in data.get("result", [])]
     totalt = (data.get("status") or {}).get("nr_total_results")
     return {"kalla": KALLA, "totalt": totalt, "antal": len(traffar), "traffar": traffar}
@@ -120,7 +126,7 @@ def hamta(identifierare: str) -> dict:
     if not identifierare or not identifierare.strip():
         raise ZbmathFel("Tomt zbMATH-id angavs.")
     data = _hamta(f"/document/{identifierare.strip()}", {})
-    post = data.get("result")
+    post = (data or {}).get("result")
     if not post:
         raise ZbmathFel(f"Hittar ingen post med id '{identifierare}' hos zbMATH Open.")
     return _forma(post if isinstance(post, dict) else post[0])

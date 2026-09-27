@@ -60,14 +60,37 @@ Versioner enligt [SemVer](https://semver.org/lang/sv/).
   enskild känd post.
 - Publicera-sökningen täcker bara 46 av 55 tidskrifter (de utan
   identifierad ISSN); se `publicera_tidskrifter.json`.
-- OSF Preprints: författarnamn utelämnas (kräver ett extra nästlat
-  embed-anrop per träff), och `filter[provider]` matchar bara en
-  preprintserver per anrop, inte en lista.
 - DiVA:s klient använder ett annat User-Agent-standardvärde än övriga nya
   källor, eftersom DiVA:s WAF blockerar strängar som börjar med
   "Discovery" (verifierat) — se `diva_client.py`.
 
 ### Rättat
+- `discovery_sok`: träffarna sorterades nyast först, vilket begravde de
+  mest relevanta. Nu rangordnas de med reciprocal rank fusion över
+  källornas egna relevansordningar, och en post som flera källor hittar
+  rankas högre. Nytt fält `hittad_i` visar alla källor som hittade posten.
+- `discovery_sok`: tidsgränsen per källa fungerade inte — en källa som tog
+  längre tid än 20 s fällde hela anropet med ett ofångat `TimeoutError`,
+  och poolen väntade ändå in alla trådar. Nu returneras svaret efter 15 s
+  med den långsamma källan redovisad under `fel`.
+- `discovery_sok`: DOI:er normaliseras (gemener, utan `https://doi.org/`
+  och `doi:`) innan deduplicering, och dubbletter slås ihop i stället för
+  att den första vinner — tomma fält som `oa_lank` fylls från andra källor.
+- arXiv i `discovery_sok`: flerordsfrågor skickades som OR (hundratusentals
+  träffar, den sökta artikeln saknades bland de första); nu blir de
+  `all:a AND all:b` utan stoppord. arXiv-träffar utan förlags-DOI får
+  arXivs DataCite-DOI (`10.48550/arxiv.<id>`) så att de slås ihop med
+  samma preprint från DataCite och OpenAlex. `arxiv_sok` är oförändrat.
+- OSF Preprints söker nu via SHARE (share.osf.io), OSF:s egen sökmotor:
+  fritext i titel och abstract över alla OSF-preprintservrar, med
+  årsfilter och författarnamn. Tidigare söktes bara en exakt delsträng i
+  titeln hos en enda preprintserver, vilket i praktiken gav noll träffar.
+- zbMATH Open svarar 404 på en sökning utan träffar; det redovisades som
+  källfel och tolkas nu som ett tomt resultat.
+- OpenAlex: vid 429 görs ett omförsök om källan ber om högst 5 s väntan
+  (`OPENALEX_MAX_VANTA_VID_429`); annars ett felmeddelande som pekar på
+  `DISCOVERY_OPENALEX_API_NYCKEL`.
+- Serverns `instructions` beskriver nu alla källor, inte bara fem.
 - `arxiv_client.py`: arXivs felpost (ogiltiga sökparametrar, t.ex. ett
   ogiltigt `sortBy`-värde) tolkas nu oavsett HTTP-status, inte bara vid
   200 — ett 400-svar gav tidigare rå Atom-XML som felmeddelande.

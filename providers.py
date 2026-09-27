@@ -33,6 +33,7 @@ men deltar ändå i den enade sökningen via PROVIDERS nedan precis som förut.
 from __future__ import annotations
 
 import concurrent.futures
+import re
 import time
 
 import arxiv_client
@@ -81,6 +82,20 @@ def _som_ar(varde) -> int | None:
     return int(text) if text.isdigit() else None
 
 
+def normalisera_doi(doi) -> str | None:
+    """Naken DOI med gemener: källorna levererar omväxlande
+    https://doi.org/-adresser, doi:-prefix och versaler, och DOI:er är
+    skiftlägesokänsliga. Utan normalisering missar dedupliceringen dubbletter."""
+    if not doi:
+        return None
+    text = str(doi).strip()
+    for prefix in ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/", "doi:"):
+        if text.lower().startswith(prefix):
+            text = text[len(prefix):]
+            break
+    return text.strip().lower() or None
+
+
 def _till_enhetligt(traff: dict) -> dict:
     """Formar en källas egen trafform till discoveryhubbens gemensamma schema.
 
@@ -92,7 +107,7 @@ def _till_enhetligt(traff: dict) -> dict:
     return {
         "kalla": traff.get("kalla"),
         "kalla_id": traff.get("kalla_id") or traff.get("doi") or traff.get("id"),
-        "doi": traff.get("doi"),
+        "doi": normalisera_doi(traff.get("doi")),
         "titel": traff.get("titel"),
         "forfattare": traff.get("forfattare") or [],
         "ar": _som_ar(traff.get("ar")),
@@ -107,6 +122,13 @@ def _till_enhetligt(traff: dict) -> dict:
 # Adaptrar för källor med ett rikare eller äldre eget schema
 # ---------------------------------------------------------------------------
 
+def _arxiv_doi(arxiv_id: str | None) -> str | None:
+    if not arxiv_id:
+        return None
+    utan_version = re.sub(r"v\d+$", "", arxiv_id)
+    return f"10.48550/arxiv.{utan_version}"
+
+
 def _arxiv_normaliserad(traff: dict) -> dict:
     """Formar en arxiv_client-träff (eget, rikare fältschema) till skalet
     _till_enhetligt() sedan fyller i. arXiv saknar utgivningsår i egentlig
@@ -116,7 +138,10 @@ def _arxiv_normaliserad(traff: dict) -> dict:
     return {
         "kalla": arxiv_client.KALLA,
         "kalla_id": traff.get("id"),
-        "doi": traff.get("doi"),
+        # Utan förlags-DOI används arXivs egen DataCite-DOI (10.48550/arXiv.<id>),
+        # som varje preprint har — annars kan träffen inte slås ihop med
+        # samma preprint från DataCite eller OpenAlex.
+        "doi": traff.get("doi") or _arxiv_doi(traff.get("id")),
         "titel": traff.get("titel"),
         "forfattare": traff.get("forfattare", []),
         "ar": ar,
@@ -127,11 +152,37 @@ def _arxiv_normaliserad(traff: dict) -> dict:
     }
 
 
+_ARXIV_SYNTAX = re.compile(r'\b(AND|OR|ANDNOT)\b|\w+:|["()]')
+
+
+_ARXIV_STOPPORD = frozenset(
+    "a an and are as at be but by for from has have in into is it its of on "
+    "or that the their this to was were which with without".split()
+)
+
+
+def _arxiv_och_fraga(q: str) -> str:
+    """Gör en fri flerordsfråga till all:a AND all:b.
+
+    arXiv kombinerar annars orden med OR, vilket i den enade sökningen gav
+    hundratusentals träffar där den sökta artikeln inte fanns bland de
+    första. En fråga som redan använder arXivs syntax (fältprefix,
+    operatorer, citattecken, parenteser) skickas oförändrad."""
+    if not q or _ARXIV_SYNTAX.search(q):
+        return q
+    # arXivs index saknar stoppord, så all:with matchar ingenting och fäller
+    # hela AND-kedjan (verifierat: noll träffar). De rensas bort först.
+    ord_ = [o for o in q.split() if o.lower() not in _ARXIV_STOPPORD]
+    if len(ord_) < 2:
+        return q
+    return " AND ".join(f"all:{o}" for o in ord_)
+
+
 def _arxiv_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
     """arXiv stödjer varken oppen_tillgang- eller land-filtrering — allt är
     fritt tillgängligt och källan saknar institutionsdata; parametrarna tas
     emot för att matcha den gemensamma sok-signaturen men ignoreras."""
-    svar = arxiv_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar)
+    svar = arxiv_client.sok(_arxiv_och_fraga(q), limit=limit, fran_ar=fran_ar, till_ar=till_ar)
     return {
         "totalt": svar.get("totalt"),
         "antal": svar.get("antal"),
@@ -192,10 +243,10 @@ def _nva_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
 
 
 def _osf_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
-    """kalla_filter kan innehålla {"leverantor": "lawarxiv"} för att byta
-    preprintserver — se osf_client.sok()."""
+    """kalla_filter kan innehålla {"leverantor": "lawarxiv"} för att begränsa
+    till en preprintserver — se osf_client.sok()."""
     leverantor = (kalla_filter or {}).get("leverantor")
-    return osf_client.sok(q, limit=limit, leverantor=leverantor)
+    return osf_client.sok(q, limit=limit, fran_ar=fran_ar, till_ar=till_ar, leverantor=leverantor)
 
 
 def _europepmc_sok(q, limit, fran_ar, till_ar, oppen_tillgang, land, kalla_filter):
@@ -335,7 +386,7 @@ PROVIDERS: dict[str, dict] = {
     },
     "osf": {
         "etikett": "OSF Preprints",
-        "beskrivning": "Ämnesinriktade preprintservrar (SocArXiv, LawArXiv, EdArXiv m.fl.), titelsökning.",
+        "beskrivning": "Ämnesinriktade preprintservrar (SocArXiv, LawArXiv, EdArXiv, PsyArXiv m.fl.), fritext via SHARE.",
         "sok": _osf_sok,
         "hamta": lambda id_: osf_client.hamta(id_),
         "fel": osf_client.OsfFel,
@@ -490,10 +541,11 @@ def sok_alla(
     land            - ISO-landskod för författarnas institutioner (samma).
     filter          - källspecifika råfilter: {"openalex": {...}, ...}.
 
-    Varje källa frågas i en egen tråd med en delad tidsgräns
+    Varje källa frågas i en egen tråd med en gemensam tidsgräns
     (_PER_KALLA_TIDSGRANS_S) — en långsam eller nedgången källa fördröjer
-    inte de andra och fäller inte hela anropet. Resultatet dedupliceras på
-    DOI (första träffen för en given DOI vinner) och sorteras nyast först.
+    inte svaret och fäller inte hela anropet, utan redovisas under "fel".
+    Träfflistorna slås ihop på DOI och rangordnas efter relevans med
+    reciprocal rank fusion (se _sla_ihop_och_rangordna).
     """
     aktiva = _aktiva_providers()
     valda = kallor or list(aktiva)
@@ -522,43 +574,37 @@ def sok_alla(
         except Exception as exc:  # oväntat fel i en källa får inte fälla helheten
             return namn, None, f"Oväntat fel: {exc}"
 
-    traffar: list[dict] = []
     per_kalla: dict[str, dict] = {}
     fel: dict[str, str] = {}
+    listor: dict[str, list[dict]] = {}
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(valda))) as pool:
+    # Poolen stängs utan att vänta in källor som överskrider tidsgränsen:
+    # deras trådar får löpa klart i bakgrunden (klienternas egen timeout
+    # sätter taket), men svaret väntar inte på dem.
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(valda)))
+    try:
         framtider = {pool.submit(_fraga_en, namn): namn for namn in valda}
-        for framtid in concurrent.futures.as_completed(framtider, timeout=_PER_KALLA_TIDSGRANS_S + 5):
-            namn = framtider[framtid]
-            try:
-                namn, resultat, felmeddelande = framtid.result(timeout=_PER_KALLA_TIDSGRANS_S)
-            except concurrent.futures.TimeoutError:
-                fel[namn] = f"Källan svarade inte inom {_PER_KALLA_TIDSGRANS_S:.0f} s."
-                continue
-            if felmeddelande is not None:
-                fel[namn] = felmeddelande
-                continue
-            traffar.extend(resultat["traffar"])
-            per_kalla[namn] = {
-                "totalt": resultat["totalt"],
-                "antal": resultat["antal"],
-                "tid_s": resultat["tid_s"],
-            }
+        klara, ej_klara = concurrent.futures.wait(framtider, timeout=_PER_KALLA_TIDSGRANS_S)
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
-    # Deduplicera på DOI — första träffen för en given DOI vinner. Träffar
-    # utan DOI (vanligt för böcker, rapporter, vissa DiVA/HAL-poster) kan
-    # inte jämföras säkert och behålls alla.
-    sedda_doi: set[str] = set()
-    deduplicerade: list[dict] = []
-    for t in traffar:
-        doi = t.get("doi")
-        if doi:
-            if doi in sedda_doi:
-                continue
-            sedda_doi.add(doi)
-        deduplicerade.append(t)
+    for framtid in ej_klara:
+        fel[framtider[framtid]] = f"Källan svarade inte inom {_PER_KALLA_TIDSGRANS_S:.0f} s."
+    for framtid in klara:
+        namn, resultat, felmeddelande = framtid.result()
+        if felmeddelande is not None:
+            fel[namn] = felmeddelande
+            continue
+        listor[namn] = resultat["traffar"]
+        per_kalla[namn] = {
+            "totalt": resultat["totalt"],
+            "antal": resultat["antal"],
+            "tid_s": resultat["tid_s"],
+        }
 
-    deduplicerade.sort(key=lambda t: (t.get("ar") is None, -(t.get("ar") or 0)))
+    # Ordning i valda-listan, inte i färdigordning — annars styr svarstiden
+    # vilken källas fält som vinner vid sammanslagning.
+    deduplicerade = _sla_ihop_och_rangordna([(namn, listor[namn]) for namn in valda if namn in listor])
 
     resultat = {
         "fraga": q,
@@ -570,6 +616,44 @@ def sok_alla(
     if fel:
         resultat["fel"] = fel
     return resultat
+
+
+# Konstanten i reciprocal rank fusion. 60 är standardvärdet i litteraturen
+# (Cormack m.fl. 2009) och dämpar skillnaden mellan plats 1 och 2 lagom.
+_RRF_K = 60
+
+
+def _sla_ihop_och_rangordna(listor: list[tuple[str, list[dict]]]) -> list[dict]:
+    """Slår ihop källornas träfflistor till en, rangordnad efter relevans.
+
+    Varje källa har redan rangordnat sina träffar efter relevans för frågan;
+    den ordningen bevaras med reciprocal rank fusion: en träff får
+    1/(k + plats) från varje källa som hittade den. En DOI som flera källor
+    hittar får därmed poäng från alla — samstämmighet mellan oberoende
+    index är en stark relevanssignal. Poster utan DOI kan inte jämföras
+    säkert och står var för sig.
+
+    Vid sammanslagning fylls tomma fält från senare källor i (t.ex.
+    oa_lank eller citeringar som bara en av källorna har), och
+    "hittad_i" visar alla källor som hittade posten.
+    """
+    poster: dict[str, dict] = {}
+    poang: dict[str, float] = {}
+    for namn, traffar in listor:
+        for plats, traff in enumerate(traffar, start=1):
+            nyckel = f"doi:{traff['doi']}" if traff.get("doi") else f"{namn}:{traff.get('kalla_id') or plats}"
+            if nyckel in poster:
+                befintlig = poster[nyckel]
+                for falt, varde in traff.items():
+                    if befintlig.get(falt) in (None, "", []) and varde not in (None, "", []):
+                        befintlig[falt] = varde
+                if namn not in befintlig["hittad_i"]:
+                    befintlig["hittad_i"].append(namn)
+            else:
+                poster[nyckel] = dict(traff, hittad_i=[namn])
+            poang[nyckel] = poang.get(nyckel, 0.0) + 1.0 / (_RRF_K + plats)
+    ordning = sorted(poster, key=lambda n: poang[n], reverse=True)
+    return [poster[n] for n in ordning]
 
 
 def hamta_fran_kalla(kalla: str, id_: str) -> dict:

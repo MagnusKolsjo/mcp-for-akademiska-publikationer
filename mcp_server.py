@@ -73,13 +73,16 @@ from mcp_transport import starta
 mcp = MCPServer(
     "discovery",
     instructions=(
-        "Sök vetenskapligt material brett över flera källor: Libris (svenska "
-        "bibliotekskatalogen), Crossref, DataCite, arXiv och OpenAlex, med "
-        "Unpaywall och Semantic Scholar som berikning för öppna länkar och "
-        "citeringar. discovery_sok slår mot alla aktiva källor samtidigt och "
-        "deduplicerar på DOI; discovery_kallor visar vilka källor som är "
-        "aktiva och varför en källa kan vara avstängd. libris_sok/cr_sok/"
-        "dc_sok/arxiv_sok har egna, rikare frågespråk för käll-specifika filter."
+        "Sök vetenskapligt material brett över många källor: internationella "
+        "index (OpenAlex, Crossref, DataCite), preprints (arXiv, OSF), svenska "
+        "och nordiska källor (Libris, SwePub, DiVA, Publicera, NVA) och "
+        "ämneskällor (Europe PMC, zbMATH Open, EconBiz, HAL, DOAJ). "
+        "discovery_sok frågar alla aktiva källor parallellt, slår ihop "
+        "träffarna på DOI och rangordnar efter relevans; discovery_kallor "
+        "visar vilka källor som är aktiva och varför en källa kan vara "
+        "avstängd. discovery_oa_lank hittar öppna kopior och "
+        "discovery_citeringar citeringsgrafen. libris_sok/cr_sok/dc_sok/"
+        "arxiv_sok har egna, rikare frågespråk för käll-specifika filter."
     ),
     version="0.1.0",
     cache_hints=CACHE_HINTAR,
@@ -559,7 +562,9 @@ def discovery_sok(
       filter          - källspecifika råfilter: {"openalex": {"topics.id": "..."}}.
 
     Varje träff har fälten: kalla, kalla_id, doi, titel, forfattare, ar, typ,
-    url, oa_lank, citeringar. Resultatet sorteras med nyast först. En källa
+    url, oa_lank, citeringar samt hittad_i (alla källor som hittade posten).
+    Resultatet rangordnas efter relevans: varje källas egen ordning vägs
+    samman, och en post som flera källor hittar rankas högre. En källa
     som fallerar eller svarar för långsamt stoppar inte de andra — dess fel
     rapporteras under "fel", och svarstiden per lyckad källa under
     "per_kalla".

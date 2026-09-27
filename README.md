@@ -36,7 +36,7 @@ hittar och beskriver poster; en separat tjänst kan hämta och lagra dem.
 | [DiVA](https://www.diva-portal.org) | ~50 svenska lärosäten/myndigheter | Sökbar | — | Egen `DIVA_USER_AGENT` (källans WAF blockerar UA-strängar som börjar med "Discovery") |
 | [Publicera](https://publicera.kb.se) (KB) | Svenska OJS-tidskrifter | Sökbar (via OpenAlex, 46/55 tidskrifter) | — | Botskyddet Anubis — identifierbar UA krävs, aldrig webbläsarlik |
 | [NVA](https://nva.sikt.no) | Norska lärosäten | Sökbar | — | Identifierbar User-Agent efterfrågas — `DISCOVERY_KONTAKT_EPOST` bakas in |
-| [OSF Preprints](https://osf.io/preprints) | SocArXiv/LawArXiv/EdArXiv m.fl. | Sökbar (titel, en leverantör/anrop) | — (token rekommenderas) | 100 anrop/timme delat utan token |
+| [OSF Preprints](https://osf.io/preprints) | SocArXiv/LawArXiv/EdArXiv/PsyArXiv m.fl. | Sökbar (fritext via SHARE, alla preprintservrar) | — (token rekommenderas för `hamta`) | REST-API:et: 100 anrop/timme delat utan token |
 | [Europe PMC](https://europepmc.org) | Biomedicin, life science | Sökbar | — | — |
 | [zbMATH Open](https://zbmath.org) | Matematik, MSC-klassificerat | Sökbar | — | Bibliografi CC0, recensioner CC BY-SA 4.0 |
 | [EconBiz](https://www.econbiz.de) (ZBW) | Nationalekonomi, working papers | Sökbar | — | Ingen massnedladdning |

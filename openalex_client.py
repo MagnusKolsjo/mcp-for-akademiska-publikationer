@@ -19,6 +19,7 @@ API-referens: https://docs.openalex.org/
 from __future__ import annotations
 
 import os
+import time
 
 import requests
 
@@ -53,6 +54,31 @@ _session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"}
 _vanta = ny_taktbegransare(0.15)
 
 
+# Längsta väntan vid 429 innan ett omförsök ges upp.
+_MAX_VANTA_VID_429_S = float(os.environ.get("OPENALEX_MAX_VANTA_VID_429", "5"))
+
+
+def _get(path: str, params: dict, headers: dict | None) -> requests.Response:
+    try:
+        return _session.get(f"{BASE_URL}{path}", params=params, headers=headers, timeout=TIMEOUT)
+    except requests.RequestException as exc:
+        raise OpenAlexFel(f"Kunde inte nå OpenAlex ({BASE_URL}{path}): {exc}") from exc
+
+
+def _retry_after(svar: requests.Response) -> float | None:
+    """Väntetid i sekunder ur Retry-After-headern eller JSON-fältet retryAfter."""
+    varde = svar.headers.get("Retry-After")
+    if varde is None:
+        try:
+            varde = svar.json().get("retryAfter")
+        except ValueError:
+            return None
+    try:
+        return max(0.0, float(varde))
+    except (TypeError, ValueError):
+        return None
+
+
 def _hamta(path: str, params: dict) -> dict:
     """GET mot OpenAlex. Kastar OpenAlexFel vid problem."""
     _vanta()
@@ -62,10 +88,21 @@ def _hamta(path: str, params: dict) -> dict:
     headers = {"Authorization": f"Bearer {API_NYCKEL}"} if API_NYCKEL else None
     if kallkonfig.KONTAKT_EPOST:
         alla.setdefault("mailto", kallkonfig.KONTAKT_EPOST)
-    try:
-        svar = _session.get(f"{BASE_URL}{path}", params=alla, headers=headers, timeout=TIMEOUT)
-    except requests.RequestException as exc:
-        raise OpenAlexFel(f"Kunde inte nå OpenAlex ({BASE_URL}{path}): {exc}") from exc
+    svar = _get(path, alla, headers)
+    if svar.status_code == 429:
+        vanta_s = _retry_after(svar)
+        # Ett kort omförsök ryms inom discovery_soks tidsgräns per källa; ett
+        # långt gör det inte, och då är ett tydligt fel mer användbart än
+        # att hela källan tidsgränsas utan förklaring.
+        if vanta_s is not None and vanta_s <= _MAX_VANTA_VID_429_S:
+            time.sleep(vanta_s)
+            svar = _get(path, alla, headers)
+    if svar.status_code == 429:
+        tips = "" if API_NYCKEL else (
+            " Utan nyckel delar anonyma anrop en hårt belastad kvot — sätt "
+            "DISCOVERY_OPENALEX_API_NYCKEL (gratis) för stabil åtkomst."
+        )
+        raise OpenAlexFel(f"OpenAlex avvisade anropet (429, för hög belastning).{tips}")
 
     if svar.status_code == 404:
         raise OpenAlexFel(f"OpenAlex har ingen post för {path}.")
