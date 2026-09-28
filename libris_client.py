@@ -19,6 +19,7 @@ import re
 
 import requests
 
+import kallkonfig
 from kallhjalp import ren_text
 
 # Libris uppmanar uttryckligen anropare att skicka en beskrivande
@@ -26,10 +27,7 @@ from kallhjalp import ren_text
 # problem — sätt en egen via miljövariabeln i drift.
 BASE_URL = os.environ.get("LIBRIS_BASE_URL", "https://libris.kb.se").rstrip("/")
 ID_BASE_URL = os.environ.get("LIBRIS_ID_BASE_URL", "https://id.kb.se").rstrip("/")
-USER_AGENT = os.environ.get(
-    "LIBRIS_USER_AGENT",
-    "Libris-MCP/0.1 (MCP-server mot Libris)",
-)
+USER_AGENT = os.environ.get("LIBRIS_USER_AGENT", "").strip() or kallkonfig.PROJEKT_USER_AGENT
 TIMEOUT = float(os.environ.get("LIBRIS_TIMEOUT", "30"))
 
 

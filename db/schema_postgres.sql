@@ -1,6 +1,13 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 -- Schema för discovery i PostgreSQL. Idempotent: körs vid varje start.
 
+-- =============================================================================
+-- Bas-schema (v1.0 — låst vid första publiceringen 2026-09-28)
+-- Ändra ALDRIG det här schemat. Nya kolumner, tabeller och index läggs som
+-- migreringar i db.py (_migrera), så att befintliga databaser uppdateras
+-- automatiskt vid nästa start.
+-- =============================================================================
+
 CREATE SCHEMA IF NOT EXISTS discovery;
 
 -- Svarscache: källornas API-svar en kort tid (se svarscache.py).

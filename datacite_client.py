@@ -22,13 +22,11 @@ import re
 
 import requests
 
+import kallkonfig
 from kallhjalp import kapa_text, ren_text, sprakkod
 
 BASE_URL = os.environ.get("DATACITE_BASE_URL", "https://api.datacite.org").rstrip("/")
-USER_AGENT = os.environ.get(
-    "DATACITE_USER_AGENT",
-    "Discovery-MCP/0.1 (MCP-server mot DataCite)",
-)
+USER_AGENT = os.environ.get("DATACITE_USER_AGENT", "").strip() or kallkonfig.PROJEKT_USER_AGENT
 TIMEOUT = float(os.environ.get("DATACITE_TIMEOUT", "30"))
 
 # Källetiketten som följer med varje normaliserad träff.

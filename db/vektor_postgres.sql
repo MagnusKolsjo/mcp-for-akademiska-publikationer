@@ -4,6 +4,7 @@
 -- projektets embeddingmodeller. Inget ANN-index: ett arbetsbibliotek har
 -- tusentals, inte miljoner, stycken, och en full genomsökning är både
 -- snabb nog och exakt.
+-- Del av bas-schemat v1.0 (låst); ändringar läggs som migreringar i db.py.
 
 CREATE EXTENSION IF NOT EXISTS vector;
 

@@ -104,7 +104,7 @@ mcp = MCPServer(
         "när den inte visats. discovery_expandera visar vilka språk en fråga "
         "bör sökas på; skicka då q per språk till discovery_sok."
     ),
-    version="0.1.0",
+    version="1.0.0",
     cache_hints=CACHE_HINTAR,
 )
 

@@ -1,9 +1,15 @@
-# Discovery MCP
+# mcp-for-akademiska-publikationer
 
-MCP-server för att söka publikationer och deras metadata. Hubben samlar flera
-live sök-API:er bakom ett gemensamt gränssnitt så att en AI-assistent kan hitta
-artiklar, böcker, forskningsdata och bibliotekskatalogposter — och slå mot
-flera källor i ett anrop.
+MCP-server för litteratursökning i ett tjugotal akademiska källor, svenska och
+internationella. En AI-assistent kan hitta, läsa och citera granskade artiklar
+och böcker liksom material som inte genomgått peer review — preprints,
+avhandlingar, rapporter och forskningsdata — på flera språk, och spara
+fulltexter i ett arbetsbibliotek för analys och citat med sidangivelse.
+
+Servern heter `discovery` i MCP-klienten och dess verktyg har prefixet
+`discovery_`. Skillen [`sok-vetenskapligt`](https://github.com/MagnusKolsjo/skills-for-sok-och-sammanstallning)
+beskriver hur en assistent använder verktygen för en flerspråkig
+litteratursökning.
 
 ## Funktion
 
@@ -36,7 +42,7 @@ den tillfälliga svarscachen.
 | [Unpaywall](https://unpaywall.org/products/api) | Open access-status för en DOI | Berikning (`discovery_oa_lank`) | `DISCOVERY_KONTAKT_EPOST` | Ingen sökning (`/v2/search` är trasig hos källan och används inte) |
 | [Semantic Scholar](https://api.semanticscholar.org/api-docs/graph) | Citeringsgraf | Berikning (`discovery_citeringar`) | — (nyckel rekommenderas) | Attribution krävs, ingen vidaredistribution i bulk — svaren cachas därför aldrig |
 | [SwePub](https://www.kb.se) (Libris Xsearch) | Svenska lärosäten/myndigheter | Sökbar (ingen `hamta`) | — | — |
-| [DiVA](https://www.diva-portal.org) | ~50 svenska lärosäten/myndigheter | Sökbar | — | Egen `DIVA_USER_AGENT` (källans WAF blockerar UA-strängar som börjar med "Discovery") |
+| [DiVA](https://www.diva-portal.org) | ~50 svenska lärosäten/myndigheter | Sökbar | — | Källans brandvägg avvisar User-Agent som börjar med "Discovery" |
 | [Publicera](https://publicera.kb.se) (KB) | Svenska OJS-tidskrifter | Sökbar (via OpenAlex, 46/55 tidskrifter) | — | Botskyddet Anubis — identifierbar UA krävs, aldrig webbläsarlik |
 | [NVA](https://nva.sikt.no) | Norska lärosäten | Sökbar | — | Identifierbar User-Agent efterfrågas — `DISCOVERY_KONTAKT_EPOST` bakas in |
 | [OSF Preprints](https://osf.io/preprints) | SocArXiv/LawArXiv/EdArXiv/PsyArXiv m.fl. | Sökbar (fritext via SHARE, alla preprintservrar) | — (token rekommenderas för `hamta`) | REST-API:et: 100 anrop/timme delat utan token |
@@ -193,7 +199,11 @@ aldrig, och Semantic Scholar cachas aldrig (villkoren förbjuder lagring).
 
 Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
 
-1. Klona repot.
+1. Klona repot:
+   ```bash
+   git clone https://github.com/MagnusKolsjo/mcp-for-akademiska-publikationer.git
+   cd mcp-for-akademiska-publikationer
+   ```
 2. Skapa ett Python-venv och installera beroenden:
    ```bash
    python3 -m venv .venv
@@ -202,15 +212,22 @@ Kräver Python med `mcp` 2.x (`mcp>=2.0,<3`).
    # Arbetsbiblioteket (valfritt):
    pip install -r requirements-bibliotek.txt
    ```
-3. Kopiera `config.example.env` till `.env` och fyll i värdena. Sätt särskilt en
-   egen `LIBRIS_USER_AGENT`, `DATACITE_USER_AGENT` och `ARXIV_USER_AGENT` med
-   kontaktuppgift, och gärna `CROSSREF_MAILTO` för Crossrefs polite pool.
-   Sätt `DISCOVERY_KONTAKT_EPOST` till din egen adress (inte ett exempel —
-   flera källor avvisar uttryckligen testadresser) för att aktivera
-   Unpaywall, höja OpenAlex artighetspool och identifiera dig mot NVA.
-   `DISCOVERY_OSF_API_NYCKEL`/`DISCOVERY_CORE_API_NYCKEL` är valfria men
-   höjer annars hårt begränsade kvoter (se källtabellen ovan).
-4. Lägg till servern i MCP-klientens konfiguration, t.ex.:
+3. Kopiera `config.example.env` till `.env` och fyll i värdena. Servern
+   identifierar sig som `mcp-for-akademiska-publikationer/1.0` med länk till
+   repot; en egen User-Agent per källa går att sätta men behövs inte. Sätt
+   gärna `CROSSREF_MAILTO` för Crossrefs polite pool, och
+   `DISCOVERY_KONTAKT_EPOST` till din egen adress (inte ett exempel — flera
+   källor avvisar uttryckligen testadresser) för att aktivera Unpaywall, höja
+   OpenAlex artighetspool och identifiera dig mot NVA. En gratis
+   `DISCOVERY_OPENALEX_API_NYCKEL` rekommenderas starkt: utan den avvisar
+   OpenAlex ofta anonyma anrop. `DISCOVERY_OSF_API_NYCKEL` och
+   `DISCOVERY_CORE_API_NYCKEL` är valfria men höjer annars hårt begränsade
+   kvoter (se källtabellen ovan).
+4. Välj databas för svarscache och arbetsbibliotek (valfritt): en egen
+   PostgreSQL-databas (`DATABASE_URL=postgresql://…`, med tillägget pgvector
+   för semantisk sökning) eller en SQLite-fil (`DATABASE_URL=sqlite:///…`).
+   Schemat skapas automatiskt vid första start.
+5. Lägg till servern i MCP-klientens konfiguration, t.ex.:
    ```json
    {
      "mcpServers": {
@@ -310,4 +327,7 @@ Servern stödjer två transporter, valda via `MCP_TRANSPORT`:
 
 AGPL-3.0-or-later.
 
-Servern lagrar ingenting från källorna. Posterna omfattas av respektive källas villkor; se kolumnen Attribution/villkor under Datakällor.
+Posterna omfattas av respektive källas villkor; se kolumnen
+Attribution/villkor under Datakällor. Servern lagrar bara källornas svar en
+kort tid (svarscachen) och de publikationer användaren själv sparar i
+arbetsbiblioteket, vars fulltexter raderas efter en inställbar tid.

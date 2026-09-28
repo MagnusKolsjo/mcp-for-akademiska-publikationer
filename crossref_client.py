@@ -26,16 +26,14 @@ import re
 
 import requests
 
+import kallkonfig
 from kallhjalp import kapa_text, ren_text, sprakkod
 
 BASE_URL = os.environ.get("CROSSREF_BASE_URL", "https://api.crossref.org").rstrip("/")
 # E-post som lägger anropen i Crossrefs polite pool. Lämnas tom om man inte
 # vill identifiera sig — då hamnar trafiken i den anonyma poolen.
 MAILTO = os.environ.get("CROSSREF_MAILTO", "").strip()
-USER_AGENT = os.environ.get(
-    "CROSSREF_USER_AGENT",
-    "Discovery-MCP/0.1 (MCP-server mot Crossref)",
-)
+USER_AGENT = os.environ.get("CROSSREF_USER_AGENT", "").strip() or kallkonfig.PROJEKT_USER_AGENT
 TIMEOUT = float(os.environ.get("CROSSREF_TIMEOUT", "30"))
 
 # Källetiketten som följer med varje normaliserad träff.

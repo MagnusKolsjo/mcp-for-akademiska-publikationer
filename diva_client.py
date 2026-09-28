@@ -31,16 +31,10 @@ import kallkonfig
 from kallhjalp import DiscoveryKallaFel, ny_taktbegransare, ren_text, sprakkod
 
 BASE_URL = os.environ.get("DIVA_BASE_URL", "https://www.diva-portal.org/smash/export.jsf")
-# DiVA:s WAF blockerar (403) User-Agent-strängar som *börjar* med "Discovery"
-# — verifierat: "Discovery-Test/1.0" gav 403, "XDiscoveryX/1.0" och
-# "Foo-Discovery-Bar/1.0" gav 302 (ordet är alltså inte förbjudet i sig,
-# bara som första token). Modulens standardvärde undviker därför den
-# delade kallkonfig-standarden och börjar med källans eget projektnamn
-# i stället; DIVA_USER_AGENT överstyr som vanligt.
-USER_AGENT = os.environ.get(
-    "DIVA_USER_AGENT",
-    "MagnusKolsjo-Discovery-MCP/0.1 (+https://github.com/MagnusKolsjo/discovery-mcp)",
-)
+# DiVA:s brandvägg avvisar (403) User-Agent-strängar som *börjar* med
+# "Discovery" — verifierat: "Discovery-Test/1.0" ger 403. Projektets
+# identitet börjar inte så och fungerar; DIVA_USER_AGENT överstyr vid behov.
+USER_AGENT = os.environ.get("DIVA_USER_AGENT", "").strip() or kallkonfig.PROJEKT_USER_AGENT
 TIMEOUT = float(os.environ.get("DIVA_TIMEOUT", "30"))
 
 KALLA = "diva"

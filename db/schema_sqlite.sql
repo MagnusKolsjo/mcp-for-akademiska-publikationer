@@ -2,6 +2,13 @@
 -- Schema för discovery i SQLite. Idempotent: körs vid varje start.
 -- Se schema_postgres.sql för kommentarer om tabellernas innehåll.
 
+-- =============================================================================
+-- Bas-schema (v1.0 — låst vid första publiceringen 2026-09-28)
+-- Ändra ALDRIG det här schemat. Nya kolumner, tabeller och index läggs som
+-- migreringar i db.py (_migrera), så att befintliga databaser uppdateras
+-- automatiskt vid nästa start.
+-- =============================================================================
+
 CREATE TABLE IF NOT EXISTS svarscache (
     nyckel TEXT PRIMARY KEY,
     kalla TEXT NOT NULL,

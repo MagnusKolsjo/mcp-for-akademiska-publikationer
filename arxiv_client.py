@@ -32,11 +32,10 @@ import xml.etree.ElementTree as ET
 
 import requests
 
+import kallkonfig
+
 BASE_URL = os.environ.get("ARXIV_BASE_URL", "https://export.arxiv.org/api/query").rstrip("/")
-USER_AGENT = os.environ.get(
-    "ARXIV_USER_AGENT",
-    "Discovery-MCP/0.1 (+https://github.com/MagnusKolsjo/discovery-mcp)",
-)
+USER_AGENT = os.environ.get("ARXIV_USER_AGENT", "").strip() or kallkonfig.PROJEKT_USER_AGENT
 TIMEOUT = float(os.environ.get("ARXIV_TIMEOUT", "30"))
 
 # Källetiketten som följer med varje träff.

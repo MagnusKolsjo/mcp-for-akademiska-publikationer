@@ -143,7 +143,28 @@ def initiera_schema() -> None:
             with hamta_db() as conn:
                 conn.execute("PRAGMA journal_mode=WAL")
         _kor_sqlfil("schema_postgres.sql" if _ar_postgres() else "schema_sqlite.sql")
+        with hamta_db() as conn:
+            _migrera(conn.cursor())
         _schema_klart = True
+
+
+def _kolumn_finns(cur, tabell: str, kolumn: str) -> bool:
+    """För migreringar i SQLite, som saknar ADD COLUMN IF NOT EXISTS."""
+    cur.execute(f"PRAGMA table_info({tabell})")
+    return any(rad[1] == kolumn for rad in cur.fetchall())
+
+
+def _migrera(cur) -> None:
+    """Schemaändringar efter v1.0, i kronologisk ordning.
+
+    Bas-schemat i db/schema_*.sql är låst sedan första publiceringen. Varje
+    ändring läggs här som ett idempotent block — ALTER TABLE … ADD COLUMN
+    IF NOT EXISTS i Postgres, _kolumn_finns() före ALTER i SQLite, och
+    WHERE x IS NULL på UPDATE som fyller nya kolumner — så att en
+    befintlig databas uppdateras vid nästa start och körningen tål att
+    upprepas. Migreringar som blandar DDL och UPDATE får en egen
+    transaktion (with conn:)."""
+    # — inga migreringar sedan v1.0 —
 
 
 def initiera_vektor() -> None:

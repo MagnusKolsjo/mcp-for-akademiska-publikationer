@@ -14,10 +14,8 @@ Gemensamt för alla källor:
     DISCOVERY_USER_AGENT     standard-User-Agent för källor utan egen
                               *_USER_AGENT sedan tidigare
 
-En källspecifik *_USER_AGENT (LIBRIS_USER_AGENT, CROSSREF_USER_AGENT,
-DATACITE_USER_AGENT, ARXIV_USER_AGENT) som redan fanns innan det här
-uppdraget har fortsatt företräde för sin källa — bakåtkompatibilitet, inte
-ett nytt krav.
+En källspecifik *_USER_AGENT (t.ex. LIBRIS_USER_AGENT eller DIVA_USER_AGENT)
+går före för sin källa, om den är satt.
 
 En källa som kräver e-post eller nyckel men saknar det inaktiveras
 automatiskt (se `krav_saknas`); den ingår då inte i discovery_sok eller
@@ -37,10 +35,8 @@ KONTAKT_EPOST = os.environ.get("DISCOVERY_KONTAKT_EPOST", "").strip()
 # kodas in här är kontakt-e-post, nycklar eller annat som pekar ut en
 # enskild installation; kontakt-e-posten läggs till separat i user_agent()
 # nedan, bara om DISCOVERY_KONTAKT_EPOST är satt.
-_STANDARD_USER_AGENT = os.environ.get(
-    "DISCOVERY_USER_AGENT",
-    "Discovery-MCP/0.1 (+https://github.com/MagnusKolsjo/discovery-mcp)",
-)
+PROJEKT_USER_AGENT = "mcp-for-akademiska-publikationer/1.0 (+https://github.com/MagnusKolsjo/mcp-for-akademiska-publikationer)"
+_STANDARD_USER_AGENT = os.environ.get("DISCOVERY_USER_AGENT", "").strip() or PROJEKT_USER_AGENT
 
 
 _SANT = ("true", "1", "ja", "på")
